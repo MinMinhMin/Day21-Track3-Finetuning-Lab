@@ -2,13 +2,13 @@
 # # NB5 — Đánh giá bốn nhóm & PHÁN QUYẾT
 #
 # Đây là notebook cho điểm. Câu hỏi được chấm **không phải** "perplexity giảm bao nhiêu"
-# mà là câu của deck §17:
+# mà là câu của deck §21:
 #
 # > **Bạn có chứng minh được bản fine-tune thắng baseline (b) — và bạn có phát hiện được
 # > nếu nó KHÔNG thắng?**
 #
 # Bốn nhóm: **target · regression · format · latency**. Một run chỉ "đạt" khi vượt (b) ở
-# target **và** không tụt general capability quá ngưỡng (deck §14.3).
+# target **và** không tụt general capability quá ngưỡng (deck §6.3).
 
 # %%
 import json, os, pathlib, sys
@@ -79,7 +79,7 @@ def score_adapter(adapter_dir: pathlib.Path, system_prompt: str | None, *,
             label=f"{label}/regression")
         reg = sum(ev.keyword_recall(p, r["keywords"]) for p, r in zip(rpreds, regression)) / len(regression)
 
-    # Deck §13.5 — reasoning-trace collapse. Only meaningful if the base has a thinking
+    # Deck §17.5 — reasoning-trace collapse. Only meaningful if the base has a thinking
     # mode AND you trained on traces; scored anyway so the number is on the record.
     trace = sum(ev.valid_reasoning_trace(p) for p in preds) / len(preds)
 
@@ -130,7 +130,7 @@ report.write_json(
 #
 # Thứ tự chẩn đoán:
 # 1. `format` thấp → template/mask (NB1), không phải LoRA
-# 2. `regression` tụt → quên thảm hoạ → thêm 1–5% replay (deck §14.3)
+# 2. `regression` tụt → quên thảm hoạ → thêm 1–5% replay (deck §6.3)
 # 3. `target` không nhúc nhích → xem lại LR (NB4 `wrong_lr`) trước khi đụng tới rank
 # 4. Cả ba đều ổn nhưng vẫn thua (b) → prompt engineering đã thắng. Đó là một kết quả.
 

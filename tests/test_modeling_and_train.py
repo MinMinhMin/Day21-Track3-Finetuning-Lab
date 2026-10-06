@@ -134,9 +134,9 @@ def test_sft_kwargs_use_the_post_v1_names():
 
 
 def test_assistant_only_loss_is_never_set():
-    """Regression (F-10): TRL's assistant_only_loss silently supervises ZERO tokens on
-    templates without {% generation %} markers, which includes Qwen3.5. The lab
-    pre-tokenizes with its own verified mask instead."""
+    """Regression (F-10): on templates without {% generation %} markers (Qwen3.5), TRL's
+    assistant_only_loss either raises, patches in a different mask, or (tokenizer path)
+    yields ZERO tokens. The lab pre-tokenizes with its own verified mask instead."""
     kw = train.sft_config_kwargs(get_tier("T4"), SPECS["correct"], "out")
     assert "assistant_only_loss" not in kw
     assert kw["packing"] is False, "pre-tokenized labels are incompatible with packing"
@@ -198,7 +198,7 @@ def test_effective_batch_ceiling_is_enforced():
 
 def test_every_shipped_tier_respects_the_ceiling():
     for name, tier in TIERS.items():
-        assert tier.effective_batch <= 32, f"tier {name} violates the §10.4 batch rule"
+        assert tier.effective_batch <= 32, f"tier {name} violates the §11.4 batch rule"
 
 
 def test_lora_kwargs_reject_an_unresolved_rank():

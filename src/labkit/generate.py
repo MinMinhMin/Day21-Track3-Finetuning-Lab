@@ -13,12 +13,12 @@ from . import device
 from .config import NAIVE_PROMPT, OPTIMIZED_PROMPT, Tier
 
 # The two prompts that define baselines (a) and (b). Baseline (b) has to be a genuine
-# effort — deck §17's whole point is that a fine-tune which cannot beat a *well-prompted*
+# effort — deck §21's whole point is that a fine-tune which cannot beat a *well-prompted*
 # base model is not worth shipping. Writing a deliberately weak (b) to flatter your
 # fine-tune is the main way to cheat this lab, and the rubric checks for it.
 
 def free_memory() -> None:
-    """Between runs. Deck §16: not doing this is the most common OOM in a multi-run lab."""
+    """Between runs. Deck §22: not doing this is the most common OOM in a multi-run lab."""
     gc.collect()
     try:
         import torch
@@ -43,7 +43,7 @@ def load_base(tier: Tier, load_in_4bit: bool = False):
     """Load the base model + tokenizer for `tier`.
 
     `load_in_4bit` is exposed only so NB4 can *measure* the QLoRA contrast. The default
-    is bf16 because the vendor advises against 4-bit on this model family (deck §12).
+    is bf16 because the vendor advises against 4-bit on this model family (deck §13).
     """
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer

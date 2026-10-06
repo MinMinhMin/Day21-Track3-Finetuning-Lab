@@ -27,7 +27,7 @@ def test_assistant_only_supervises_the_answer_not_the_question():
 
 
 def test_everything_mode_is_the_classic_bug():
-    """`everything` supervises the prompt too — the §16 'model writes your question back'."""
+    """`everything` supervises the prompt too — the §22 'model writes your question back'."""
     tok = FakeTokenizer()
     ex = data.build_example(tok, MSGS, mask_mode="everything")
     supervised = data.decode_supervised(tok, ex)
@@ -186,7 +186,7 @@ def test_token_lists_really_are_not_prefix_related():
 
 
 def test_eos_token_is_supervised():
-    """<|im_end|> must be in the loss or the model never learns to stop (deck §16)."""
+    """<|im_end|> must be in the loss or the model never learns to stop (deck §22)."""
     tok = FakeTokenizer()
     ex = data.build_example(tok, MSGS, mask_mode="assistant-only")
     assert tok.eos_token in data.decode_supervised(tok, ex)

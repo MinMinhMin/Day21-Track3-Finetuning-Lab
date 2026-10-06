@@ -111,7 +111,7 @@ def supports_padding_free(min_batch: int = 2) -> bool:
 
     * **Safe** — needs a FlashAttention kernel. Padding-free flattens a batch into one
       sequence; without a kernel that understands the boundaries, attention can run
-      across them. That is exactly deck §13.3's warning ("packing is free only when
+      across them. That is exactly deck §17.3's warning ("packing is free only when
       sequence boundaries are respected") applied to its sibling flag.
     * **Useful** — pointless at `per_device_train_batch_size=1`: there is no padding
       between sequences to remove when a batch holds one sequence. TRL says so

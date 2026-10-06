@@ -1,11 +1,11 @@
 """Four-group evaluation and the regression gate.
 
-Deck §17: perplexity alone is not evidence. A fine-tune is only a win if it beats a
+Deck §21: perplexity alone is not evidence. A fine-tune is only a win if it beats a
 *well-prompted base model* on the target task **without** quietly losing general
 capability. So every run is scored on four groups:
 
     1. target      — does it do the job you trained it for?
-    2. regression  — did it forget everything else? (deck §14.3)
+    2. regression  — did it forget everything else? (deck §6.3)
     3. format      — does it obey the output contract?
     4. latency     — what did the win cost at inference time?
 
@@ -111,7 +111,7 @@ def has_required_keys(pred: str, keys: list[str]) -> float:
 
 
 def valid_reasoning_trace(pred: str, open_tag="<think>", close_tag="</think>") -> float:
-    """Deck §13.5: the metric that catches reasoning-trace collapse.
+    """Deck §17.5: the metric that catches reasoning-trace collapse.
 
     A trace is valid when the block exists, is closed, and is not empty. Task accuracy
     can rise while this falls to zero — which is the entire point of measuring it.
@@ -217,7 +217,7 @@ def regression_gate(
     if not kept_capability:
         reasons.append(
             f"general capability regressed by {abs(regression_delta):.3f} "
-            f"(tolerance {tolerance:.3f}). See deck §14.3 — add 1-5% replay data."
+            f"(tolerance {tolerance:.3f}). See deck §6.3 — add 1-5% replay data."
         )
     if not reasons:
         reasons.append(

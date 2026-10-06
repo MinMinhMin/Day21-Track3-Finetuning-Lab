@@ -63,7 +63,7 @@ down_proj gate_proj up_proj  q_proj k_proj v_proj o_proj
 in_proj_a in_proj_b in_proj_qkv in_proj_z out_proj   <- Gated DeltaNet layers
 ```
 
-The extra five are the **linear-attention** layers (deck §6.4: 24 linear + 8 full
+The extra five are the **linear-attention** layers (deck §7.4: 24 linear + 8 full
 attention, a 3:1 interleave). Adapting them is correct — they are part of the text
 decoder — but it changes the arithmetic: matched rank for attention-only is **r≈283**
 on the real model versus r≈90 on a plain-transformer shape. `matched_rank()` computes
@@ -213,10 +213,25 @@ TRL  assistant_masks  :  0/31 tokens ( 0.0%)   ''
 VERDICT: FAIL — TRL would supervise NOTHING.
 ```
 
-transformers emits a **warning, not an error**. Training completes. A loss curve is
-drawn. The numbers are meaningless.
+transformers emits a **warning, not an error**. Any pipeline that builds its batches from
+that mask trains on nothing, and the loss curve still looks plausible.
 
-This is precisely the class of bug the deck spends §13.2 and §16 on — *"no error, a
+> **Correction (2026-10-06, measured with TRL 1.10.0).** The 0/31 above is the
+> *tokenizer* path (`apply_chat_template(return_assistant_tokens_mask=True)`), which is
+> what this script measured — not an `SFTTrainer` run. `SFTTrainer(assistant_only_loss=True)`
+> in TRL >= 1.10 first calls `get_training_chat_template()`:
+>
+> | base model | labkit (NB1) | tokenizer path | SFTTrainer path |
+> |---|---|---|---|
+> | `unsloth/Qwen3.5-4B` (lab default) | 11/31 | 0/31, warning only | **raises `ValueError`** (template not recognised) |
+> | `Qwen/Qwen3.5-2B` (official template) | 9/31 | 0/31, warning only | **patches the template → 13/31**, incl. the empty `<think>\n\n</think>\n\n` |
+>
+> So the trainer is loud, not silent — the original "training completes" sentence was an
+> inference that did not hold. The fix below still stands, for a sharper reason: the flag
+> either crashes or supervises a mask that is not the one NB1 proved.
+> `scripts/check_mask_agreement.py` now prints both paths.
+
+This is precisely the class of bug the deck spends §17.2 and §22 on — *"no error, a
 plausible loss curve, and a broken model"* — reproduced by the lab's own default
 configuration. NB1 proves the mask is correct and then NB3 threw that proof away and
 trusted a library flag.
@@ -227,7 +242,7 @@ trusted a library flag.
 set at all.
 
 Consequence, stated honestly on the slide-facing side: pre-tokenized labels are
-incompatible with `packing`, so packing is off for this path. Deck §13.3's point
+incompatible with `packing`, so packing is off for this path. Deck §17.3's point
 (packing is free only when boundaries are respected) still stands — here the *mask's
 correctness* outranks the throughput, and the lab says so rather than quietly keeping a
 flag that does nothing.
@@ -260,7 +275,7 @@ emit only JSON, so it emits ~20 tokens and stops; the naive prompt lets it rambl
 160-token cap.
 
 Worth teaching: prompt engineering bought a **3× latency win before any fine-tuning**,
-which sharpens deck §17's point that baseline (b) is a real bar — it is better on the
+which sharpens deck §21's point that baseline (b) is a real bar — it is better on the
 target metric *and* cheaper to serve.
 
 ---
@@ -296,7 +311,8 @@ TRL  assistant_masks  :  0/31 tokens ( 0.0%)
 VERDICT: FAIL — TRL would supervise NOTHING.
 ```
 
-Identical to the local reproduction — the F-10 fix is aimed at a real defect on the
+(That verdict line is the old wording; it describes the tokenizer path only — see the
+correction under F-10.) Identical to the local reproduction — the F-10 fix is aimed at a real defect on the
 real platform, not an artifact of the Mac.
 
 ---
@@ -322,7 +338,7 @@ Three separate problems in one flag:
 
 1. **Unsafe here.** Padding-free flattens a batch into one sequence. Without a kernel
    that understands the boundaries, attention can run *across* them — literally deck
-   §13.3's warning ("packing is free only when sequence boundaries are respected")
+   §17.3's warning ("packing is free only when sequence boundaries are respected")
    applied to packing's sibling flag. **FlashAttention-2 needs Ampere (sm_80+), so a T4
    cannot have it at all.**
 2. **Useless here.** The T4 tier uses `per_device_train_batch_size=1`. There is no
@@ -335,7 +351,7 @@ kernel **and** batch ≥ 2. When it *is* available, `max_length=None` is passed 
 honest, because `build_example()` already truncates — rather than silencing the check.
 +3 tests (79 total).
 
-**Meta-point worth keeping:** the deck teaches `packing` + `padding_free` as the §13.3
+**Meta-point worth keeping:** the deck teaches `packing` + `padding_free` as the §17.3
 recommendation. On the hardware the lab actually recommends, neither is available. The
 lab now says that out loud instead of setting flags that do not apply.
 
@@ -855,10 +871,10 @@ result; quote it as proof that the pipeline transmits learning to the eval at al
 
 **The lab's central design validated itself empirically.** Baseline (b) is a genuinely
 hard bar — 0.760 target with perfect JSON compliance and 3× lower latency than (a).
-A fine-tune has to beat *that*, which is exactly the discipline deck §17 argues for and
+A fine-tune has to beat *that*, which is exactly the discipline deck §21 argues for and
 the opposite of the old lab's perplexity-vs-nothing comparison.
 
-Deck §6.4 also became a lab artifact: NB3 printed the real model's
+Deck §7.4 also became a lab artifact: NB3 printed the real model's
 `layer_types: {linear_attention: 24, full_attention: 8}` — the 3:1 hybrid interleave,
 read off the checkpoint the student is fine-tuning.
 

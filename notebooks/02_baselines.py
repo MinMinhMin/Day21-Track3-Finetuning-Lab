@@ -1,7 +1,7 @@
 # %% [markdown]
 # # NB2 — Đóng băng eval & đo BA baseline (trước khi train)
 #
-# > Deck §17: *điểm không nằm ở việc perplexity giảm bao nhiêu, mà ở việc bạn có chứng
+# > Deck §21: *điểm không nằm ở việc perplexity giảm bao nhiêu, mà ở việc bạn có chứng
 # > minh được bản fine-tune thắng baseline (b) hay không.*
 #
 # **Thứ tự quan trọng.** Đo baseline **trước** khi train, không phải sau. Nếu đo sau,
