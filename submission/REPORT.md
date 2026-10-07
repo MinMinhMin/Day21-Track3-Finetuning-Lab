@@ -4,6 +4,10 @@
 **Tier**: `<CPU|LAPTOP|T4|BIGGPU>`  **Base model**: `<model id>`  **GPU thực tế**: `<T4 16GB / ...>`
 
 > Mọi con số dưới đây phải khớp với file trong `results/`. Grader kiểm tra chéo.
+>
+> **Mẫu này là gợi ý.** Bạn được tự chọn base model, dataset và tự viết report theo cấu
+> trúc của mình — miễn là có đủ: lựa chọn + lý do, bằng chứng mask, mốc đóng băng, kết quả,
+> phán quyết, điều học được (rubric 4.1).
 
 ---
 

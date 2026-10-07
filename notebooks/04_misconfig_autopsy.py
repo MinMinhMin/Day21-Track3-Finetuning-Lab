@@ -3,7 +3,7 @@
 #
 # Lab Day 21 **phiên bản cũ** lấy "quét rank r=8/16/64" làm thí nghiệm trung tâm, gắn
 # LoRA vào `q_proj, v_proj`, và chấm bằng perplexity. Deck hiện tại gọi đúng ba thứ đó
-# là **Lỗi #1, #2, #3** (§10.2–§10.4).
+# là **Lỗi #1, #2, #3** (§11.2–§11.4).
 #
 # Notebook này không xoá thí nghiệm cũ — nó **chạy lại thí nghiệm cũ như một đối chứng**,
 # để bạn tự tay thấy danh tiếng *"LoRA học kém hơn full fine-tune"* xuất hiện rồi biến mất.
@@ -194,4 +194,4 @@ print(report.markdown_table(rows, cols))
 # 2. `wrong_lr` chỉ khác đúng một con số. Đường loss khác nhau bao nhiêu? Nếu chỉ nhìn
 #    loss mà không biết LR, bạn sẽ kết luận gì — và kết luận đó có đúng không?
 # 3. `qlora` tiết kiệm bao nhiêu VRAM, và **trả giá bằng gì**? Nhà cung cấp khuyến nghị
-#    *không* dùng QLoRA cho dòng model này (deck §12) — số đo của bạn có ủng hộ điều đó không?
+#    *không* dùng QLoRA cho dòng model này (deck §13) — số đo của bạn có ủng hộ điều đó không?

@@ -1,17 +1,17 @@
 # %% [markdown]
 # # NB3 — Huấn luyện cấu hình ĐÚNG
 #
-# Cấu hình ở đây là "vùng không hối tiếc" của deck §10, viết thẳng thành code:
+# Cấu hình ở đây là "vùng không hối tiếc" của deck §11, viết thẳng thành code:
 #
 # | Nút | Giá trị | Deck |
 # |---|---|---|
-# | `target_modules` | **toàn bộ linear của text decoder** | §10.2 |
-# | `learning_rate` | **≈10× LR full-FT** | §10.3 |
-# | batch hiệu dụng | **< 32** | §10.4 |
-# | `packing` | **tắt** — xem ghi chú | §13.3 |
-# | `padding_free` | chỉ khi có flash-attn **và** batch ≥ 2 | §13.3 |
+# | `target_modules` | **toàn bộ linear của text decoder** | §11.2 |
+# | `learning_rate` | **≈10× LR full-FT** | §11.3 |
+# | batch hiệu dụng | **< 32** | §11.4 |
+# | `packing` | **tắt** — xem ghi chú | §17.3 |
+# | `padding_free` | chỉ khi có flash-attn **và** batch ≥ 2 | §17.3 |
 #
-# > **Vì sao khác deck §15.** Deck khuyến nghị bật `packing` + `padding_free`. Trên
+# > **Vì sao khác deck §14.** Deck khuyến nghị bật `packing` + `padding_free`. Trên
 # > model mặc định của lab, cả hai đều **không dùng được**, và lab nói thẳng thay vì
 # > bật cờ vô tác dụng:
 # >
@@ -22,10 +22,10 @@
 # >   T4 là Turing, không bao giờ có. Và với `batch=1` thì cũng chẳng có padding nào
 # >   để bỏ. Xem `labkit/device.py`.
 # >
-# > Tinh thần §13.3 vẫn đúng: *tăng tốc chỉ miễn phí khi ranh giới chuỗi được tôn
+# > Tinh thần §17.3 vẫn đúng: *tăng tốc chỉ miễn phí khi ranh giới chuỗi được tôn
 # > trọng.* Ở đây điều kiện đó không thoả, nên ta không bật.
-# | `loss_type` | `chunked_nll` | §15 |
-# | `alpha` | `2r` | §9.3 |
+# | `loss_type` | `chunked_nll` | §14 |
+# | `alpha` | `2r` | §10.3 |
 
 # %%
 import json, os, pathlib, sys, time
@@ -44,7 +44,7 @@ print(device.banner())      # which precision is ACTUALLY being used, and why
 # %% [markdown]
 # ## 1. Nạp model — và nhìn vào kiến trúc bạn đang fine-tune
 #
-# Deck §6.4 nói các base 2026 xen kẽ **linear attention** với **full attention**. Đây là
+# Deck §7.4 nói các base 2026 xen kẽ **linear attention** với **full attention**. Đây là
 # chỗ điều đó thôi là slide: config của chính model sẽ nói cho bạn biết.
 
 # %%
@@ -87,8 +87,10 @@ MASK_MODE = os.environ.get("MASK_MODE", "assistant-only")
 # Train on the mask you PROVED in NB1 — not on a library flag.
 #
 # TRL's `assistant_only_loss` builds its mask from `{% generation %}` markers in the
-# chat template. Qwen3.5 has none, so that flag supervises ZERO tokens while emitting
-# only a warning: training completes, the loss curve looks fine, the run is worthless.
+# chat template. Qwen3.5 has none. TRL >= 1.10 then either RAISES (this lab's unsloth
+# template) or swaps in its own patched template (official Qwen3.5) whose mask also
+# covers the empty <think> block — neither is the mask NB1 proved. And a pipeline that
+# reads the tokenizer's mask directly gets ZERO tokens with only a warning.
 # Check it yourself:  python scripts/check_mask_agreement.py
 rows = data.to_training_dataset(tok, train_rows, max_length=TIER.max_length,
                                 mask_mode=MASK_MODE)

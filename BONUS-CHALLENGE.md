@@ -6,7 +6,7 @@
 
 ---
 
-## B1 — Merge & phục vụ nhiều adapter (+3) · deck §18
+## B1 — Merge & phục vụ nhiều adapter (+3) · deck §23
 
 Chạy `make nb6`. Yêu cầu:
 * `results/merge_check.json` cho thấy điểm **sau merge** không tụt quá 0.01
@@ -17,7 +17,7 @@ adapter riêng dù chậm hơn một chút?
 
 ---
 
-## B2 — Dataset miền của bạn (+3) · deck §13
+## B2 — Dataset miền của bạn (+3) · deck §17
 
 ≥200 mẫu chất lượng cao, miền bạn thật sự quan tâm. Bắt buộc có `data/CUSTOM_DATASET.md`:
 nguồn · cách thu thập · cách khử nhiễm (eval không được xuất hiện trong train) · vì sao
@@ -28,7 +28,7 @@ thích vì sao: base 2026 đã bão hoà dữ liệu web phổ thông.
 
 ---
 
-## B3 — Reasoning-trace collapse (+4) · deck §13.5 ⭐ khó nhất
+## B3 — Reasoning-trace collapse (+4) · deck §17.5 ⭐ khó nhất
 
 Phát hiện mới nhất của deck: fine-tune một model biết suy luận bằng dữ liệu hỏi-đáp
 thông thường **phá huỷ năng lực suy luận trong khi accuracy vẫn tăng** — không chỉ số
@@ -49,7 +49,7 @@ Báo cáo bảng:
 | response-only | | | |
 
 **Câu hỏi:** `target` có tăng trong khi `valid_trace_rate` giảm không? Nếu chỉ nhìn
-`target`, bạn có phát hiện ra vấn đề không? Đây chính là lý do deck §17 nói perplexity —
+`target`, bạn có phát hiện ra vấn đề không? Đây chính là lý do deck §21 nói perplexity —
 và cả accuracy — một mình không phải bằng chứng.
 
 > Chiều tác động **phụ thuộc model**: nghiên cứu gốc thấy "khối `<think>` rỗng" huỷ hoại
@@ -57,7 +57,7 @@ và cả accuracy — một mình không phải bằng chứng.
 
 ---
 
-## B4 — Quét rank CÓ kiểm soát (+3) · deck §10
+## B4 — Quét rank CÓ kiểm soát (+3) · deck §11
 
 Thí nghiệm trung tâm của lab cũ, làm cho đúng: **cố định** `target_modules="text-linear"`,
 chỉ quét `r ∈ {8, 16, 64}`, giữ nguyên LR và số step.
@@ -66,7 +66,7 @@ chỉ quét `r ∈ {8, 16, 64}`, giữ nguyên LR và số step.
 khi đổi *vị trí* (run `attn_only` ở NB4) và khi đổi *LR* (run `wrong_lr`). Xếp hạng ba
 nút vặn đó theo mức ảnh hưởng — kèm số.
 
-Deck §10 nói rank là **năng lực so với lượng thông tin trong dữ liệu**, không phải nút
+Deck §11 nói rank là **năng lực so với lượng thông tin trong dữ liệu**, không phải nút
 chỉnh chất lượng. Dữ liệu 250 mẫu của bạn có đủ thông tin để r=64 dùng hết không?
 
 ---
@@ -80,9 +80,9 @@ Link trong report. Adapter công khai = kiểm chứng được, và đẹp trê
 
 ---
 
-## B6 — Không tính điểm: optimizer mismatch · deck §6.3
+## B6 — Không tính điểm: optimizer mismatch · deck §7.3
 
-Cho ai muốn chạm vào Part A của deck. Deck §6.3: chuyển sang **Muon** để fine-tune một
+Cho ai muốn chạm vào Part A của deck. Deck §7.3: chuyển sang **Muon** để fine-tune một
 model **đã pre-train bằng Adam** làm *giảm* chất lượng — gọi là *lệch optimizer* — và mức
 hư hại **tỷ lệ với độ lớn bước cập nhật**, nên **LoRA làm nó sống sót được**.
 
@@ -94,7 +94,7 @@ thì giá trị hơn đoán đúng.
 
 ---
 
-## B7 — Không tính điểm: MoE route-aware LoRA · deck §6.5
+## B7 — Không tính điểm: MoE route-aware LoRA · deck §7.5
 
 Nếu bạn có GPU đủ lớn cho một base **MoE** (vd. Qwen3.5-35B-A3B): định tuyến expert lệch
 nặng, nên gắn LoRA vào *mọi* expert là lãng phí. Đếm số lần định tuyến trên một tập hiệu

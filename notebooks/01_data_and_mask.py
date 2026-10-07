@@ -16,7 +16,7 @@
 # **Chạy được trên CPU. Không cần GPU.** Đây là notebook duy nhất như vậy — và cũng là
 # notebook quyết định kết quả của cả lab.
 #
-# > Deck §13.2: *che loss và chat template quyết định kết quả nhiều hơn mọi biến thể
+# > Deck §17.2: *che loss và chat template quyết định kết quả nhiều hơn mọi biến thể
 # > LoRA cộng lại.* Notebook này không dạy bạn tin điều đó — nó bắt bạn **nhìn thấy** nó.
 #
 # Cuối notebook bạn sẽ có 4 artefact bắt buộc nộp:
@@ -72,7 +72,7 @@ print("eos_token:", tok.eos_token)
 # %% [markdown]
 # ### Kiểm tra bắt buộc #1 — template có giữ khối suy luận không?
 #
-# Deck §16: **một số chat template xoá nội dung `<think>` ngay trong
+# Deck §22: **một số chat template xoá nội dung `<think>` ngay trong
 # `apply_chat_template`.** Khi đó reasoning traces trong dataset của bạn *không bao giờ*
 # tới được hàm loss — và không có gì báo lỗi cả. Kiểm tra một lần cho mỗi base model.
 
@@ -91,7 +91,7 @@ report.write_json(check, "template_check.json", results_dir=ROOT / "results")
 # | mode | Loss tính trên | Dùng khi |
 # |---|---|---|
 # | `assistant-only` | toàn bộ lượt assistant | mặc định SFT |
-# | `masked-think` | lượt assistant **trừ** khối suy luận | base có chế độ thinking (§13.5) |
+# | `masked-think` | lượt assistant **trừ** khối suy luận | base có chế độ thinking (§17.5) |
 # | `response-only` | chỉ phần sau `</think>` | nghiêm ngặt nhất |
 # | `everything` | **cả prompt** | ✗ đây là bug kinh điển — để bạn nhìn thấy nó |
 
@@ -110,7 +110,7 @@ for mode in ("assistant-only", "everything"):
 # **Dừng lại và đọc kỹ output ở trên.**
 #
 # Với `everything`, câu hỏi của bạn nằm trong phần được tính loss → model sẽ học cách
-# *viết lại câu hỏi*. Đó chính xác là triệu chứng ở deck §16 (“Model viết tiếp câu hỏi
+# *viết lại câu hỏi*. Đó chính xác là triệu chứng ở deck §22 (“Model viết tiếp câu hỏi
 # của bạn”). Rất nhiều người chỉ phát hiện ra sau khi train xong 3 tiếng.
 
 # %% [markdown]
@@ -146,7 +146,7 @@ report.write_json(proof, "mask_proof.json", results_dir=ROOT / "results")
 # %% [markdown]
 # ## 4. Độ dài token → `max_length`
 #
-# Deck §13: `max_length` là **số đo**, không phải con số đoán. Đặt theo p95 rồi làm tròn
+# Deck §17: `max_length` là **số đo**, không phải con số đoán. Đặt theo p95 rồi làm tròn
 # lên luỹ thừa 2. Đặt quá lớn = trả tiền cho padding; quá nhỏ = cắt mất câu trả lời.
 
 # %%

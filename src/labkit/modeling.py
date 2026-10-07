@@ -7,12 +7,12 @@ Qwen3.5 ships as `Qwen3_5ForConditionalGeneration`: a text decoder *plus* a visi
 tower. PEFT's `target_modules="all-linear"` walks every `nn.Linear` in the model, so
 it happily attaches adapters to the vision encoder you are not training on. You get a
 bigger adapter, slower steps, and a checkpoint that is wrong to merge. The deck says
-"all-linear" (§10.2) because the study behind it used text-only models — on a 2026
+"all-linear" (§11.2) because the study behind it used text-only models — on a 2026
 multimodal checkpoint you want *all text-decoder linear layers*, which is what
 `resolve_target_modules(model, "text-linear")` returns.
 
 **2. Fair contrasts need matched parameter counts, not matched ranks.**
-The claim in §10.2 is that attention-only placement loses to full placement *at the
+The claim in §11.2 is that attention-only placement loses to full placement *at the
 same parameter budget*. Comparing `q,v @ r=16` against `all-linear @ r=16` compares
 budgets, not placements, and proves nothing. `matched_rank()` solves for the rank that
 puts attention-only on the same budget, so the only variable left is *where*.
@@ -159,7 +159,7 @@ def describe_placement(model, r: int = 16) -> list[dict]:
 
 
 def layer_type_summary(model_config) -> dict:
-    """Deck §6.4 made visible: the 2026 bases interleave linear and full attention.
+    """Deck §7.4 made visible: the 2026 bases interleave linear and full attention.
 
     Qwen3.5's text config carries `layer_types` / `full_attention_interval`. Printing
     this in the lab is the point where the architecture section stops being a slide.

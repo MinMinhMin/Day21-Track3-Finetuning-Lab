@@ -86,7 +86,7 @@ Sau lab này, học viên có thể:
 
 | | Điểm | Yêu cầu |
 |---|---|---|
-| 4.1 | 5 | Đủ 7 mục theo mẫu `submission/REPORT.md` |
+| 4.1 | 5 | Report **do bạn tự cấu trúc** (mẫu `submission/REPORT.md` chỉ là gợi ý), nhưng phải có: model + dataset đã chọn và **lý do**, bằng chứng mask, mốc đã đóng băng, kết quả so sánh, phán quyết, điều học được |
 | 4.2 | 5 | Kết luận ≥150 từ, có lập luận nhân quả — không chỉ liệt kê số |
 | 4.3 | 5 | Mọi con số trong report **khớp** với file trong `results/` |
 | 4.4 | 5 | "Điều tôi học được" — phản tư cá nhân, cụ thể, không generic |
@@ -97,7 +97,7 @@ Sau lab này, học viên có thể:
 |---|---|---|
 | B1 | +3 | **NB6**: merge + assert điểm không tụt + hot-swap ≥2 adapter |
 | B2 | +3 | **Dataset miền riêng** ≥200 mẫu chất lượng + `data/CUSTOM_DATASET.md` có mô tả khử nhiễm |
-| B3 | +4 | **Reasoning-trace collapse** (deck §13.5): train hai lần với `MASK_MODE=assistant-only` và `response-only` trên base có chế độ thinking; báo cáo `valid_trace_rate` của cả hai |
+| B3 | +4 | **Reasoning-trace collapse** (deck §17.5): train hai lần với `MASK_MODE=assistant-only` và `response-only` trên base có chế độ thinking; báo cáo `valid_trace_rate` của cả hai |
 | B4 | +3 | **Quét rank có kiểm soát**: cố định vị trí = `text-linear`, quét r ∈ {8,16,64}, trả lời *khi nào* rank mới là đòn bẩy |
 | B5 | +2 | Push adapter lên **HuggingFace Hub** công khai + link trong report |
 
@@ -166,8 +166,8 @@ Làm mạnh (b) lên: hoan nghênh. Làm yếu đi: đó là gian lận.
 | Model viết lại câu hỏi | `MASK_MODE=everything` | quay về `assistant-only` (NB1) |
 | Loss phẳng từ step 0 | LR thang full-FT | ×10 (xem run `wrong_lr` ở NB4) |
 | `format` ~0 nhưng target khá | template/EOS lệch | in chuỗi **sau** `apply_chat_template` |
-| `regression` tụt mạnh | quên thảm hoạ | trộn 1–5% dữ liệu phổ thông (deck §14.3) |
-| Suy luận biến mất, accuracy vẫn tăng | reasoning-trace collapse | `MASK_MODE=response-only` (deck §13.5) |
+| `regression` tụt mạnh | quên thảm hoạ | trộn 1–5% dữ liệu phổ thông (deck §6.3) |
+| Suy luận biến mất, accuracy vẫn tăng | reasoning-trace collapse | `MASK_MODE=response-only` (deck §17.5) |
 | OOM ở run thứ hai | không giải phóng bộ nhớ | `generate.free_memory()` giữa các run |
 | `all-linear` ra adapter to bất thường | gắn cả vào vision tower | dùng `resolve_target_modules()` |
 
@@ -175,7 +175,7 @@ Làm mạnh (b) lên: hoan nghênh. Làm yếu đi: đó là gian lận.
 
 ## 📚 Tham chiếu
 
-* Deck Ngày 21 — §10 (LoRA Without Regret), §13 (dữ liệu & mask), §17 (đánh giá), §18 (merge/serve)
+* Deck Ngày 21 — §11 (LoRA Without Regret), §17 (dữ liệu & mask), §21 (đánh giá), §23 (merge/serve)
 * `RESEARCH-day21-v2-training-stack-2026.md` — nguồn cho mọi con số 2026 trong lab
 * LoRA (Hu et al. 2021) · QLoRA (Dettmers et al. 2023) · *LoRA Without Regret* (Thinking Machines 2025)
 * TRL docs — `lora_without_regret`
