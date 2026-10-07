@@ -58,7 +58,7 @@ mỗi model một khác, và mask phải được chứng minh lại (NB1).
 
 ### Colab (khuyến nghị)
 
-Mở **[`colab/Lab21_RUN_ALL.ipynb`](https://colab.research.google.com/github/VinUni-AI20k/Day21-Track3-Finetuning-Lab/blob/main/colab/Lab21_RUN_ALL.ipynb)**
+Mở **[`colab/Lab21_RUN_ALL.ipynb`](https://colab.research.google.com/github/MinMinhMin/Day21-Track3-Finetuning-Lab/blob/main/colab/Lab21_RUN_ALL.ipynb)**
 → Runtime → Change runtime type → **T4 GPU** → chạy lần lượt ô 1 → 4.
 
 > **Mỗi lần repo đổi, hãy mở LẠI tab (reload), đừng chỉ reconnect.** Colab đọc mã
@@ -67,10 +67,17 @@ Mở **[`colab/Lab21_RUN_ALL.ipynb`](https://colab.research.google.com/github/Vi
 > chính nó `git pull` repo — nhưng cài theo *danh sách gói cũ*. Lỗi sẽ nổ ~10 phút sau,
 > bên trong `get_peft_model()`. Xem F-19 trong `SIMULATION-FINDINGS.md`.
 
+### Kaggle
+
+Mở notebook `colab/Lab21_RUN_ALL.ipynb` từ fork này trong Kaggle. Trong Notebook Settings,
+bật **Internet** và chọn **GPU T4×2**. Ô Setup tự chọn `/kaggle/working`; pipeline dùng
+GPU khả dụng và chạy NB1–NB5. Để nộp bài, giữ `EVAL_LIMIT=""`. Ô cuối cần Kaggle Secret
+`HF_TOKEN` có quyền ghi vào Hugging Face repo đã cấu hình trong notebook.
+
 ### Máy cá nhân
 
 ```bash
-git clone https://github.com/VinUni-AI20k/Day21-Track3-Finetuning-Lab.git
+git clone https://github.com/MinMinhMin/Day21-Track3-Finetuning-Lab.git
 cd Day21-Track3-Finetuning-Lab
 cp .env.example .env
 

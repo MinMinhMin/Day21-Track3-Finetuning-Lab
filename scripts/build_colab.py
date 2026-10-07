@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Generate colab/*.ipynb from notebooks/*.py (jupytext py:percent).
 
-The .py files are the source of truth. The Colab notebooks are generated, plus a
-bootstrap cell that clones the repo and installs deps — Colab starts with no repo.
+The .py files are the source of truth. The notebooks are generated with a bootstrap
+cell that clones the fork and installs dependencies on Kaggle or Colab.
 
 Usage: python scripts/build_colab.py    (needs jupytext)
 """
@@ -17,27 +17,47 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 SRC = ROOT / "notebooks"
 OUT = ROOT / "colab"
 
-BOOTSTRAP = """# @title Setup (chạy ô này trước)
-# Colab bắt đầu với một máy trống — clone repo và cài dependency.
+BOOTSTRAP = """# @title Setup (Kaggle / Colab)
+# Clone the fork into the writable workspace, then install the shared lab dependencies.
+from pathlib import Path
 import os, subprocess, sys
 
-REPO = "https://github.com/VinUni-AI20k/Day21-Track3-Finetuning-Lab.git"
-if not os.path.exists("Day21-Track3-Finetuning-Lab"):
-    subprocess.run(["git", "clone", "-q", REPO], check=True)
-os.chdir("Day21-Track3-Finetuning-Lab")
-sys.path.insert(0, "src")
+REPO = "https://github.com/MinMinhMin/Day21-Track3-Finetuning-Lab"
+if (Path.cwd() / "scripts" / "colab_run.py").is_file():
+    REPO_DIR = Path.cwd()
+    if (REPO_DIR / ".git").exists():
+        subprocess.run(["git", "-C", str(REPO_DIR), "remote", "set-url", "origin", REPO], check=False)
+else:
+    if Path("/kaggle/working").is_dir():
+        WORK_DIR = Path("/kaggle/working")
+    elif Path("/content").is_dir():
+        WORK_DIR = Path("/content")
+    else:
+        WORK_DIR = Path.cwd()
+    REPO_DIR = WORK_DIR / "Day21-Track3-Finetuning-Lab"
+    if REPO_DIR.exists():
+        if not (REPO_DIR / ".git").exists():
+            raise RuntimeError(f"Existing directory is not a git checkout: {REPO_DIR}")
+        subprocess.run(["git", "-C", str(REPO_DIR), "remote", "set-url", "origin", REPO], check=True)
+        subprocess.run(["git", "-C", str(REPO_DIR), "pull", "--ff-only"], check=False)
+    else:
+        subprocess.run(["git", "clone", "-q", REPO, str(REPO_DIR)], check=True)
+os.chdir(REPO_DIR)
+sys.path.insert(0, str(REPO_DIR / "src"))
 
 # Install from requirements.txt, NOT a copied list. The copied list is how the
 # torchao>=0.16 pin reached requirements.txt and this bootstrap on different days --
 # and a bootstrap missing a pin does not fail here, it fails 10 minutes later inside
-# get_peft_model(). One source of truth. torch is preinstalled on Colab and
-# requirements.txt pins it compatibly, so that line is a no-op.
+# get_peft_model(). One source of truth. Kaggle/Colab provide CUDA-enabled torch;
+# requirements.txt keeps the training stack consistent across both environments.
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", "requirements.txt"],
                check=True)
 
 os.environ.setdefault("COMPUTE_TIER", "T4")
 import torch
-print("GPU:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "NONE — Runtime > Change runtime type > T4 GPU")
+gpu_names = [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]
+print("Repo:", REPO_DIR)
+print("GPU(s):", gpu_names if gpu_names else "NONE — enable a GPU in Notebook Settings")
 """
 
 
