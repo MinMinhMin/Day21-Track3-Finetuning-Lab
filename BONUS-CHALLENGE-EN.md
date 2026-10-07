@@ -6,7 +6,7 @@
 
 ---
 
-## B1 — Merge & multi-adapter serving (+3) · deck §18
+## B1 — Merge & multi-adapter serving (+3) · deck §23
 
 Run `make nb6`. Required: `results/merge_check.json` showing post-merge score does not
 drop by more than 0.01, and ≥2 adapters hot-swapped on one loaded base.
@@ -16,7 +16,7 @@ keep adapters separate anyway?
 
 ---
 
-## B2 — Your own domain dataset (+3) · deck §13
+## B2 — Your own domain dataset (+3) · deck §17
 
 ≥200 high-quality examples. Requires `data/CUSTOM_DATASET.md`: source · collection method
 · decontamination · **why this data is distributionally new** relative to what the base
@@ -27,7 +27,7 @@ generic web text.
 
 ---
 
-## B3 — Reasoning-trace collapse (+4) · deck §13.5 ⭐ hardest
+## B3 — Reasoning-trace collapse (+4) · deck §17.5 ⭐ hardest
 
 Fine-tuning a reasoning model on ordinary Q→A data **destroys its reasoning while task
 accuracy keeps rising**. No familiar metric catches it.
@@ -50,7 +50,7 @@ MASK_MODE=response-only  make nb3 && make nb5   # record valid_trace_rate
 
 ---
 
-## B4 — A *controlled* rank sweep (+3) · deck §10
+## B4 — A *controlled* rank sweep (+3) · deck §11
 
 The old lab's centrepiece, done properly: **hold** `target_modules="text-linear"` fixed,
 sweep only `r ∈ {8, 16, 64}`, same LR and step budget.
@@ -66,7 +66,7 @@ with numbers. Does your 250-sample dataset carry enough information for r=64 to 
 
 ---
 
-## B6 — Ungraded: optimizer mismatch · deck §6.3
+## B6 — Ungraded: optimizer mismatch · deck §7.3
 
 Switching to **Muon** to fine-tune an **Adam-pretrained** model *degrades* quality —
 "optimizer mismatch" — with severity proportional to update magnitude, which is why
@@ -76,7 +76,7 @@ Write your prediction first. A wrong prediction you can explain beats a lucky gu
 
 ---
 
-## B7 — Ungraded: MoE route-aware LoRA · deck §6.5
+## B7 — Ungraded: MoE route-aware LoRA · deck §7.5
 
 On an MoE base, expert routing is heavily skewed, so adapting every expert wastes most of
 the adapter. Profile routing counts on a small calibration set, adapt only the **top 25%

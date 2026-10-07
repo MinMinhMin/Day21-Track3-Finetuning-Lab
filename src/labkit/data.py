@@ -1,6 +1,6 @@
 """Chat templating, loss masking, and dataset prep.
 
-The deck's claim (§13.2) is that loss masking and the chat template decide more
+The deck's claim (§17.2) is that loss masking and the chat template decide more
 outcomes than every LoRA variant combined. This module exists so you can *see* the
 mask rather than trust a library flag.
 
@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 
 IGNORE_INDEX = -100
 
-# What the loss is computed over. Deck §13.5: on a reasoning base, this choice can
+# What the loss is computed over. Deck §17.5: on a reasoning base, this choice can
 # preserve or destroy the model's reasoning behaviour, and the safe option is
 # model-dependent — so it is a parameter, not a constant.
 MASK_MODES = ("assistant-only", "masked-think", "response-only", "everything")
@@ -117,7 +117,7 @@ def build_example(
       "masked-think"   — supervise the assistant turn but NOT its reasoning block
       "response-only"  — supervise only what follows </think> (strictest)
       "everything"     — supervise all tokens, prompt included. This is the classic
-                         bug (§16: "model writes your question back at you"); it is
+                         bug (§22: "model writes your question back at you"); it is
                          selectable so NB1 can show you what it looks like.
     """
     if mask_mode not in MASK_MODES:
@@ -173,7 +173,7 @@ def _skip_reasoning_chars(text: str, start: int, end: int, think_close: str) -> 
     left in `[start, end)` to skip: on a corpus of plain answers `masked-think` and
     `response-only` produce a mask identical to `assistant-only`. This only does work
     when the assistant *content* carries its own reasoning block, which is what a
-    §13.5 experiment needs its training data to look like.
+    §17.5 experiment needs its training data to look like.
     """
     at = text.find(think_close, start, end)
     if at == -1:
@@ -196,7 +196,7 @@ def decode_masked(tokenizer, ex: Example) -> str:
 
 
 def thinking_survives(tokenizer, think_open="<think>", think_close="</think>") -> dict:
-    """Deck §16: some chat templates DELETE reasoning blocks inside apply_chat_template.
+    """Deck §22: some chat templates DELETE reasoning blocks inside apply_chat_template.
 
     If that happens, the reasoning traces in your dataset never reach the loss — and
     nothing errors. Run this once per base model, before training.
@@ -233,7 +233,7 @@ def thinking_survives(tokenizer, think_open="<think>", think_close="</think>") -
 
 
 def token_stats(lengths: list[int]) -> dict:
-    """p50/p95/p99 so `max_length` is a measurement, not a guess (deck §13)."""
+    """p50/p95/p99 so `max_length` is a measurement, not a guess (deck §17)."""
     if not lengths:
         return {"n": 0}
     ordered = sorted(lengths)
@@ -321,9 +321,10 @@ def to_training_dataset(
 
     **Why pre-tokenize instead of letting TRL do it.** TRL's `assistant_only_loss`
     derives its mask from `{% generation %}` markers in the chat template. Qwen3.5's
-    template has none, so that flag yields a mask of ZERO supervised tokens — and
-    transformers only *warns*. Training runs to completion and the numbers are
-    meaningless. Run `scripts/check_mask_agreement.py` to see it on your own base model.
+    template has none. The tokenizer then returns a mask of ZERO tokens and transformers
+    only *warns*; TRL >= 1.10's trainer raises (unsloth template) or swaps in a patched
+    template whose mask is not the one NB1 proved. Run `scripts/check_mask_agreement.py`
+    to see both paths on your own base model.
 
     Training on the output of `build_example()` means the loss covers exactly the tokens
     the student decoded and asserted on in NB1. No flag in between to be wrong.
@@ -337,7 +338,7 @@ def to_training_dataset(
     # already closes an empty `<think></think>`, so on a corpus of plain answers the
     # skip has nothing left to skip and all three modes emit an identical mask — see
     # `_skip_reasoning_chars`. The shipped triage corpus is exactly that: 250 bare-JSON
-    # answers. A student who sets MASK_MODE for the §13.5 contrast would otherwise see
+    # answers. A student who sets MASK_MODE for the §17.5 contrast would otherwise see
     # no difference and no reason why, so say it out loud instead of being silently inert.
     if mask_mode in ("masked-think", "response-only"):
         if not any(think_open in (r.get("output") or "") for r in records):
@@ -346,7 +347,7 @@ def to_training_dataset(
                 f"{len(records)} records carry a {think_open} block in their answer, "
                 "and the chat template closes its empty reasoning block inside the "
                 "generation prompt. The resulting mask is identical to 'assistant-only'. "
-                "Exercising deck §13.5 needs training answers that contain real traces "
+                "Exercising deck §17.5 needs training answers that contain real traces "
                 "— see 'Đổi dataset của riêng bạn' in README.md.",
                 RuntimeWarning,
                 stacklevel=2,

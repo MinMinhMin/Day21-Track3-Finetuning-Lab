@@ -111,7 +111,7 @@ def test_reasoningless_corpus_warns_for_think_modes():
     closes an empty <think></think>, so `masked-think` and `response-only` are
     byte-identical to `assistant-only` there. Silent no-ops are what this lab is about."""
     from labkit import data
-    from tests.fake_tokenizer import FakeTokenizer
+    from fake_tokenizer import FakeTokenizer
 
     records = [{"instruction": "i", "input": "x", "output": '{"a": 1}'}]
     with pytest.warns(RuntimeWarning, match="no-op on this corpus"):
@@ -121,7 +121,7 @@ def test_reasoningless_corpus_warns_for_think_modes():
 
 def test_no_warning_when_the_corpus_has_traces():
     from labkit import data
-    from tests.fake_tokenizer import FakeTokenizer
+    from fake_tokenizer import FakeTokenizer
 
     records = [{"instruction": "i", "input": "x",
                 "output": '<think>vi sao</think>\n{"a": 1}'}]
@@ -134,10 +134,21 @@ def test_no_warning_when_the_corpus_has_traces():
 def test_assistant_only_never_warns():
     """The default mode is not affected by any of this."""
     from labkit import data
-    from tests.fake_tokenizer import FakeTokenizer
+    from fake_tokenizer import FakeTokenizer
 
     records = [{"instruction": "i", "input": "x", "output": '{"a": 1}'}]
     with warnings.catch_warnings():
         warnings.simplefilter("error", RuntimeWarning)
         data.to_training_dataset(FakeTokenizer(), records, max_length=128,
                                  mask_mode="assistant-only")
+
+
+def test_base_model_override_keeps_tier_settings(monkeypatch):
+    """Students may pick their own base model; the tier's hardware settings stay."""
+    from labkit.config import get_tier
+    monkeypatch.setenv("BASE_MODEL", "Qwen/Qwen3.5-2B")
+    t = get_tier("T4")
+    assert t.model_id == "Qwen/Qwen3.5-2B"
+    assert (t.max_length, t.per_device_batch, t.grad_accum) == (1024, 1, 16)
+    monkeypatch.delenv("BASE_MODEL")
+    assert get_tier("T4").model_id == "unsloth/Qwen3.5-4B"

@@ -3,7 +3,7 @@
 One source of truth for "which model on which GPU". Everything else imports from here
 so a student changes `COMPUTE_TIER` in `.env` and the whole lab follows.
 
-Design note (deck §12): Unsloth's own Qwen3.5 guidance is *do not use QLoRA on this
+Design note (deck §13): Unsloth's own Qwen3.5 guidance is *do not use QLoRA on this
 generation* — quantization error is higher than normal. So the default path here is
 **bf16 LoRA**, and 4-bit is something the student *measures* in NB4 rather than
 assumes. That is the opposite of the 2024-era lab this replaces.
@@ -11,7 +11,7 @@ assumes. That is the opposite of the 2024-era lab this replaces.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 
 @dataclass(frozen=True)
@@ -75,24 +75,31 @@ DEFAULT_TIER = "T4"
 
 
 def get_tier(name: str | None = None) -> Tier:
-    """Resolve the active tier from an argument, then $COMPUTE_TIER, then the default."""
+    """Resolve the active tier from an argument, then $COMPUTE_TIER, then the default.
+
+    $BASE_MODEL (any Hugging Face model id) replaces the tier's default model and keeps
+    the tier's hardware settings. Students are free to choose their own base model; every
+    stage reads it from here, so baselines and fine-tune always use the same one.
+    """
     key = (name or os.environ.get("COMPUTE_TIER") or DEFAULT_TIER).upper()
     if key not in TIERS:
         raise ValueError(
             f"Unknown COMPUTE_TIER={key!r}. Pick one of: {', '.join(TIERS)}"
         )
-    return TIERS[key]
+    tier = TIERS[key]
+    override = os.environ.get("BASE_MODEL", "").strip()
+    return replace(tier, model_id=override) if override else tier
 
 
 # --- Training configuration -------------------------------------------------
-# The deck's §10 result: the learning rate should be set on the *scale* of ~10x the
+# The deck's §11 result: the learning rate should be set on the *scale* of ~10x the
 # full-fine-tune LR, and that scale matters more than the exact value. A full FT of a
 # 4B model sits near 1e-5, so LoRA lands near 1e-4.
 FULL_FT_LR = 1e-5
 LORA_LR_MULTIPLIER = 10.0
 LORA_LR = FULL_FT_LR * LORA_LR_MULTIPLIER          # 1e-4
 
-# §10.4: LoRA tolerates large batches worse than full FT, and raising rank does not
+# §11.4: LoRA tolerates large batches worse than full FT, and raising rank does not
 # fix it. Keep the effective batch under 32.
 MAX_EFFECTIVE_BATCH = 32
 
@@ -116,7 +123,7 @@ class LoraSpec:
         return self.alpha / self.r
 
     def resolved(self, r: int) -> "LoraSpec":
-        """Fill in a computed rank (alpha follows the deck's 2r invariant, §9.3)."""
+        """Fill in a computed rank (alpha follows the deck's 2r invariant, §10.3)."""
         from dataclasses import replace
         return replace(self, r=r, alpha=2 * r)
 
@@ -126,7 +133,7 @@ SPECS: dict[str, LoraSpec] = {
         key="correct", r=16, alpha=32, target="text-linear", lr=LORA_LR,
         load_in_4bit=False,
         label="all-linear · r=16 · LR 10x · 16-bit",
-        teaches="The deck's low-regret configuration (§10).",
+        teaches="The deck's low-regret configuration (§11).",
     ),
     # r=None => resolved at runtime by modeling.matched_rank() so this run sits on the
     # SAME trainable-parameter budget as `correct`. On Qwen3.5-4B that lands near r=90.
@@ -135,20 +142,20 @@ SPECS: dict[str, LoraSpec] = {
         key="attn_only", r=None, alpha=None, target="attn-only", lr=LORA_LR,
         load_in_4bit=False,
         label="q,v only · r=matched · LR 10x · 16-bit",
-        teaches="Mistake #1 (§10.2): attention-only placement, rank raised to *match "
+        teaches="Mistake #1 (§11.2): attention-only placement, rank raised to *match "
                 "parameter count*. If rank were the lever, this would win.",
     ),
     "wrong_lr": LoraSpec(
         key="wrong_lr", r=16, alpha=32, target="text-linear", lr=FULL_FT_LR,
         load_in_4bit=False,
         label="all-linear · r=16 · LR 1x (full-FT scale) · 16-bit",
-        teaches="Mistake #2 (§10.3): a full-fine-tune learning rate applied to LoRA.",
+        teaches="Mistake #2 (§11.3): a full-fine-tune learning rate applied to LoRA.",
     ),
     "qlora": LoraSpec(
         key="qlora", r=16, alpha=32, target="text-linear", lr=LORA_LR,
         load_in_4bit=True,
         label="all-linear · r=16 · LR 10x · 4-bit QLoRA",
-        teaches="The vendor says do NOT use QLoRA on Qwen3.5 (§12). Measure the cost "
+        teaches="The vendor says do NOT use QLoRA on Qwen3.5 (§13). Measure the cost "
                 "yourself instead of taking either side on faith.",
     ),
 }

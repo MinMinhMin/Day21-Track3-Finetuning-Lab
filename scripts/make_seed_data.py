@@ -11,7 +11,7 @@ has an *objective* scorer:
 
 A base model with a naive prompt does badly at this; a base model with a *good* prompt
 does respectably. That is the point: baseline (b) has to be a real bar to clear
-(deck §17), otherwise "my fine-tune won" means nothing.
+(deck §21), otherwise "my fine-tune won" means nothing.
 
 Run:  python scripts/make_seed_data.py
 """
@@ -92,7 +92,7 @@ def to_record(t: dict) -> dict:
 
 # A general-capability slice: short VN instruction-following items unrelated to triage.
 # If the fine-tune starts answering these in triage-JSON, that is catastrophic
-# forgetting (deck §14.3) and the regression group is what catches it.
+# forgetting (deck §6.3) and the regression group is what catches it.
 REGRESSION_ITEMS = [
     ("Thủ đô của Việt Nam là thành phố nào?", ["Hà Nội"]),
     ("Kể tên hai đại dương lớn nhất thế giới.", ["Thái Bình Dương", "Đại Tây Dương"]),

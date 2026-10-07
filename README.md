@@ -1,7 +1,7 @@
 # Day 21 — Fine-tuning LLMs · Lab (Track 3)
 
 > **AICB-P2T3 · Ngày 21 · Chương 5 — Fine-tuning & An Toàn**
-> Đi kèm deck `day21-fine-tuning-llms-lora-qlora.tex` (90 trang · 20 mục).
+> Đi kèm deck `day21-fine-tuning-llms-lora-qlora.tex` (140 trang · 25 module; bản gọn 72 trang).
 
 **Một câu tóm tắt lab:** fine-tune một model mở bằng LoRA — rồi **chứng minh** nó thắng
 được chính model đó khi đã được prompt tử tế. Nếu không chứng minh được, phát hiện ra
@@ -16,6 +16,25 @@
    nếu nó không thắng?** (NB2 đóng băng mốc, NB5 phán quyết)
 
 Mọi thứ còn lại là chi tiết kỹ thuật phục vụ hai câu này.
+
+---
+
+## Thí nghiệm của bạn — bạn tự chọn
+
+Lab là **khung đo**, không phải đề bài cố định. Bạn được tự do chọn:
+
+| | Mặc định | Đổi thế nào |
+|---|---|---|
+| **Base model** | theo tier (Qwen3.5-4B trên T4) | `BASE_MODEL=<hf-id>` trong `.env` — giữ nguyên cấu hình phần cứng của tier |
+| **Dataset** | 250 ticket CSKH → JSON | xem [Đổi dataset của riêng bạn](#đổi-dataset-của-riêng-bạn) |
+| **Report** | mẫu `submission/REPORT.md` | **tự viết** theo cấu trúc của bạn — mẫu chỉ là gợi ý |
+
+Hai điều **không** đổi, vì thiếu chúng thì phép so sánh mất nghĩa:
+1. **Khai báo** model, dataset và lý do chọn trong report.
+2. Mốc (NB2) **đóng băng trước** khi train, và cùng một base model cho mốc lẫn bản fine-tune.
+
+Đổi base model? Chạy `python scripts/check_mask_agreement.py` trước khi train — template
+mỗi model một khác, và mask phải được chứng minh lại (NB1).
 
 ---
 
@@ -39,7 +58,7 @@ Mọi thứ còn lại là chi tiết kỹ thuật phục vụ hai câu này.
 
 ### Colab (khuyến nghị)
 
-Mở **[`colab/Lab21_RUN_ALL.ipynb`](https://colab.research.google.com/github/hieutrungdao/Day21-Track3-Finetuning-Lab/blob/main/colab/Lab21_RUN_ALL.ipynb)**
+Mở **[`colab/Lab21_RUN_ALL.ipynb`](https://colab.research.google.com/github/VinUni-AI20k/Day21-Track3-Finetuning-Lab/blob/main/colab/Lab21_RUN_ALL.ipynb)**
 → Runtime → Change runtime type → **T4 GPU** → chạy lần lượt ô 1 → 4.
 
 > **Mỗi lần repo đổi, hãy mở LẠI tab (reload), đừng chỉ reconnect.** Colab đọc mã
@@ -51,7 +70,7 @@ Mở **[`colab/Lab21_RUN_ALL.ipynb`](https://colab.research.google.com/github/hi
 ### Máy cá nhân
 
 ```bash
-git clone https://github.com/hieutrungdao/Day21-Track3-Finetuning-Lab.git
+git clone https://github.com/VinUni-AI20k/Day21-Track3-Finetuning-Lab.git
 cd Day21-Track3-Finetuning-Lab
 cp .env.example .env
 
@@ -137,8 +156,8 @@ LLM judge, nên không có "điểm cho không":
 
 ### Đổi dataset của riêng bạn
 
-Được khuyến khích — nhưng **chạy hết một lượt với corpus mặc định trước** để có mốc.
-Khi đổi: thêm `data/CUSTOM_DATASET.md` mô tả nguồn, kích thước và cách khử nhiễm; nếu
+Được khuyến khích. Gợi ý (không bắt buộc): chạy một lượt với corpus mặc định trước để
+quen pipeline. Khi đổi: thêm `data/CUSTOM_DATASET.md` mô tả nguồn, kích thước và cách khử nhiễm; nếu
 không, `make verify` sẽ báo FAIL vì checksum tập eval đã đổi. (Đó là chủ ý: sửa tập eval
 sau khi thấy kết quả sẽ làm hỏng toàn bộ phép so sánh.)
 

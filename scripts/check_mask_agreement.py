@@ -6,10 +6,19 @@ decoding it. NB3 then hands training to TRL with `assistant_only_loss=True` and 
 it to do the same thing. If TRL masks differently — or silently masks nothing — every
 number downstream is measuring a different experiment than the one NB1 verified.
 
-TRL's assistant-only masking depends on the chat template exposing `{% generation %}`
-markers. Templates that lack them can fall back to *no masking at all* without raising,
-which is the dangerous case: training completes, the loss curve looks plausible, and
-the model has been trained on the prompt as well.
+Assistant-only masking depends on the chat template exposing `{% generation %}`
+markers. There are two paths, and they behave differently on a template without them:
+
+  1. tokenizer path — `tok.apply_chat_template(..., return_assistant_tokens_mask=True)`.
+     transformers only WARNS and returns an all-zero mask. Code that builds its own
+     training batches from this mask trains on nothing, silently.
+  2. trainer path — `SFTTrainer(assistant_only_loss=True)`, TRL >= 1.10. TRL first calls
+     `get_training_chat_template()`: a template it recognises *verbatim* (official
+     Qwen3.5 is one) is swapped for a patched copy; any other template raises
+     ValueError; an all-zero mask raises RuntimeError. Loud, not silent — but the
+     patched template's mask is TRL's choice, not the one NB1 proved.
+
+This script reports both, next to labkit's mask.
 
     python scripts/check_mask_agreement.py
 
@@ -75,13 +84,16 @@ def main() -> int:
           f"({theirs_n/max(1,len(ids)):.1%})")
     print(f"  supervised text: {theirs_text!r}")
 
+    _trainer_path(tok, messages)
+
     if theirs_n == 0:
-        print("\nVERDICT: FAIL — TRL would supervise NOTHING. Training would be a no-op "
-              "on the loss you care about.")
+        print("\nVERDICT: FAIL — the tokenizer-level mask is EMPTY. A pipeline that builds "
+              "batches from it trains on nothing, with only a warning. (SFTTrainer itself "
+              "patches or raises — see the trainer path above — but its mask is not NB1's.)")
         return 1
     if theirs_n == len(ids):
         print("\nVERDICT: FAIL — TRL would supervise EVERY token, prompt included "
-              "(deck §16: the model learns to rewrite your question).")
+              "(deck §22: the model learns to rewrite your question).")
         return 1
 
     answer = messages[-1]["content"][:20]
@@ -93,6 +105,32 @@ def main() -> int:
         return 0
     print("VERDICT: MISMATCH — investigate before trusting NB3's numbers.")
     return 1
+
+
+def _trainer_path(tok, messages) -> None:
+    """What SFTTrainer(assistant_only_loss=True) would do (TRL >= 1.10)."""
+    try:
+        from trl.chat_template_utils import get_training_chat_template
+    except ImportError:
+        print("\ntrainer path: this TRL has no get_training_chat_template (< 1.10) — "
+              "older TRL relied on the tokenizer path above.")
+        return
+    try:
+        patched = get_training_chat_template(tok)
+    except ValueError as exc:
+        print(f"\ntrainer path: SFTTrainer would RAISE ValueError — {str(exc)[:90]}...")
+        return
+    if patched is None:
+        print("\ntrainer path: template already training-compatible; SFTTrainer uses it as is.")
+        return
+    r = tok.apply_chat_template(messages, tokenize=True, return_dict=True,
+                                return_assistant_tokens_mask=True, chat_template=patched)
+    ids, mask = r["input_ids"], r["assistant_masks"]
+    if ids and isinstance(ids[0], list):
+        ids, mask = ids[0], mask[0]
+    text = tok.decode([t for t, m in zip(ids, mask) if m], skip_special_tokens=False)
+    print(f"\ntrainer path: TRL PATCHES the template -> {sum(mask)}/{len(ids)} tokens")
+    print(f"  supervised text: {text!r}")
 
 
 def _advise(has_generation: bool) -> int:

@@ -8,12 +8,13 @@ it does not — so the lab keeps running when TRL moves again, and tells you wha
 dropped instead of failing at step 0.
 
 The defaults encode the deck:
-  * `target_modules` = text-decoder linear layers (§10.2, corrected for the vision tower)
-  * `learning_rate`  = ~10x the full-FT scale (§10.3)
-  * effective batch  < 32 (§10.4)
+  * `target_modules` = text-decoder linear layers (§11.2, corrected for the vision tower)
+  * `learning_rate`  = ~10x the full-FT scale (§11.3)
+  * effective batch  < 32 (§11.4)
   * the loss mask comes from `labkit.data.to_training_dataset()`, NOT from TRL's
-    `assistant_only_loss` — that flag silently supervises nothing on templates without
-    `{% generation %}` markers, which includes Qwen3.5 (see check_mask_agreement.py)
+    `assistant_only_loss` — on Qwen3.5 (no `{% generation %}` markers) TRL >= 1.10 either
+    raises or substitutes its own patched template, so the mask is not NB1's
+    (see check_mask_agreement.py)
   * `loss_type="chunked_nll"` (TRL >= 1.7 default; ~30-50% less VRAM)
 """
 from __future__ import annotations
@@ -93,7 +94,7 @@ def sft_config_kwargs(
     if tier.effective_batch > MAX_EFFECTIVE_BATCH:
         raise ValueError(
             f"effective batch {tier.effective_batch} exceeds {MAX_EFFECTIVE_BATCH} "
-            "(deck §10.4: LoRA tolerates large batches worse than full FT, and raising "
+            "(deck §11.4: LoRA tolerates large batches worse than full FT, and raising "
             "rank does not fix it). Lower grad_accum for this tier."
         )
     kw = dict(
@@ -142,8 +143,9 @@ def sft_config_kwargs(
 
     # NOTE — deliberately NOT setting `assistant_only_loss`.
     # TRL derives that mask from `{% generation %}` markers in the chat template, and
-    # Qwen3.5's template has none: the flag produces a mask of ZERO supervised tokens
-    # while emitting only a warning. See scripts/check_mask_agreement.py.
+    # Qwen3.5's template has none. TRL >= 1.10 then raises ValueError (unsloth template)
+    # or patches the official template — a mask that also covers the empty <think>
+    # block. The raw tokenizer mask is ZERO tokens. See scripts/check_mask_agreement.py.
     # Instead the dataset is pre-tokenized by labkit.data.to_training_dataset(), so the
     # loss covers exactly the mask verified in NB1. That also forces packing off:
     # packing concatenates examples and would invalidate the label alignment.
@@ -203,7 +205,7 @@ def lora_config_kwargs(spec: LoraSpec, target_modules: list[str]) -> dict:
         )
     return dict(
         r=spec.r,
-        lora_alpha=spec.alpha,                    # §9.3 invariant: alpha = 2r
+        lora_alpha=spec.alpha,                    # §10.3 invariant: alpha = 2r
         lora_dropout=0.0,
         bias="none",
         task_type="CAUSAL_LM",

@@ -19,7 +19,7 @@ Qwen3.5. Đổi model thì phải đổi số — và đo lại bằng `torch.cu
 | Qwen3.5-27B | ~56 GB | A100 80 GB, H100 |
 
 Activation + KV cache tăng theo `max_length × batch`. Tier T4 dùng `max_length=1024`,
-`batch=1`, `grad_accum=16` → batch hiệu dụng 16 (dưới trần 32 của deck §10.4).
+`batch=1`, `grad_accum=16` → batch hiệu dụng 16 (dưới trần 32 của deck §11.4).
 
 > **Đo thực tế trên Colab Free (08/2026):** T4 báo **14,6 GB** khả dụng, không phải 16.
 > Checkpoint `Qwen3.5-4B` bf16 nặng **9,32 GB** khi tải — riêng trọng số đã chiếm ~64%
@@ -46,7 +46,7 @@ scaling** để tránh underflow — trainer chỉ bật khi được báo `fp16
 
 Lab Day 21 cũ mặc định QLoRA 4-bit. Với **dòng model 2026 này, nhà cung cấp khuyến nghị
 KHÔNG dùng QLoRA** — sai số lượng tử hoá cao hơn bình thường — và đề xuất bf16 LoRA,
-nhất là với biến thể MoE (deck §12). Ở 4B, bf16 LoRA vẫn vừa T4, nên bạn không phải đánh đổi.
+nhất là với biến thể MoE (deck §13). Ở 4B, bf16 LoRA vẫn vừa T4, nên bạn không phải đánh đổi.
 
 4-bit vẫn có mặt trong lab, nhưng **như một phép đo** (run `qlora` ở NB4), không phải mặc định.
 

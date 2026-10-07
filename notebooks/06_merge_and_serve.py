@@ -1,7 +1,7 @@
 # %% [markdown]
 # # NB6 (tuỳ chọn) — Merge, kiểm chứng sau merge, và hoán đổi adapter
 #
-# Deck §18. Hai đường triển khai:
+# Deck §23. Hai đường triển khai:
 # * **Merge** — `W = W₀ + (α/r)·BA`, đồ thị phục vụ giống hệt base → **không** overhead.
 # * **Giữ riêng** — một base trong VRAM, nhiều adapter, chọn theo từng request.
 #
@@ -61,7 +61,7 @@ print(f"sau merge:   {after:.4f}   (Δ {delta:+.4f})")
 TOL = 0.01
 assert delta >= -TOL, (
     f"điểm TỤT {abs(delta):.4f} sau merge (ngưỡng {TOL}). Kiểm tra dtype lúc merge; "
-    "với DoRA cần PEFT ≥ 0.10 để gộp đúng vector magnitude (deck §18)."
+    "với DoRA cần PEFT ≥ 0.10 để gộp đúng vector magnitude (deck §23)."
 )
 
 out = ROOT / "adapters" / "merged"
@@ -74,7 +74,7 @@ del merged; generate.free_memory()
 # %% [markdown]
 # ## 3. Một base, nhiều adapter — hoán đổi theo request
 #
-# Đây là lập luận kinh tế của LoRA ở deck §18: base nằm trong VRAM một lần, mỗi khách
+# Đây là lập luận kinh tế của LoRA ở deck §23: base nằm trong VRAM một lần, mỗi khách
 # hàng/tác vụ là một adapter vài chục MB.
 
 # %%

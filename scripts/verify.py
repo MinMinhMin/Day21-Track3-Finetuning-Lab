@@ -64,7 +64,7 @@ def smoke() -> None:
     offenders = [n for n, t in TIERS.items() if t.effective_batch > 32]
     if offenders:
         check("tier batch rule", FAIL,
-              f"{offenders} exceed the 32 effective-batch ceiling (deck §10.4)")
+              f"{offenders} exceed the 32 effective-batch ceiling (deck §11.4)")
     else:
         check("all tiers respect the <32 effective-batch rule", OK)
 
