@@ -58,7 +58,7 @@ mỗi model một khác, và mask phải được chứng minh lại (NB1).
 
 ### Colab (khuyến nghị)
 
-Mở **[`colab/Lab21_RUN_ALL.ipynb`](https://colab.research.google.com/github/hieutrungdao/Day21-Track3-Finetuning-Lab/blob/main/colab/Lab21_RUN_ALL.ipynb)**
+Mở **[`colab/Lab21_RUN_ALL.ipynb`](https://colab.research.google.com/github/VinUni-AI20k/Day21-Track3-Finetuning-Lab/blob/main/colab/Lab21_RUN_ALL.ipynb)**
 → Runtime → Change runtime type → **T4 GPU** → chạy lần lượt ô 1 → 4.
 
 > **Mỗi lần repo đổi, hãy mở LẠI tab (reload), đừng chỉ reconnect.** Colab đọc mã
@@ -70,7 +70,7 @@ Mở **[`colab/Lab21_RUN_ALL.ipynb`](https://colab.research.google.com/github/hi
 ### Máy cá nhân
 
 ```bash
-git clone https://github.com/hieutrungdao/Day21-Track3-Finetuning-Lab.git
+git clone https://github.com/VinUni-AI20k/Day21-Track3-Finetuning-Lab.git
 cd Day21-Track3-Finetuning-Lab
 cp .env.example .env
 
