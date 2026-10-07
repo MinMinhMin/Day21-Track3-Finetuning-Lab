@@ -15,7 +15,8 @@ The defaults encode the deck:
     `assistant_only_loss` — on Qwen3.5 (no `{% generation %}` markers) TRL >= 1.10 either
     raises or substitutes its own patched template, so the mask is not NB1's
     (see check_mask_agreement.py)
-  * `loss_type="chunked_nll"` (TRL >= 1.7 default; ~30-50% less VRAM)
+  * `loss_type="nll"` — avoids TRL's chunked-LM-head patch, which is incompatible
+    with Qwen3.5's `functools.partial` model forward in the Kaggle environment
 """
 from __future__ import annotations
 
@@ -110,7 +111,9 @@ def sft_config_kwargs(
         report_to="none",
         seed=seed,
         packing=False,       # we supply pre-tokenized labels -- see the note below
-        loss_type="chunked_nll",                  # TRL >= 1.7 default; big VRAM saving
+        # Plain NLL avoids TRL's chunked loss patch, which assumes model.forward is a
+        # bound method. Qwen3.5 exposes it as functools.partial and crashes in SFTTrainer.
+        loss_type="nll",
         gradient_checkpointing=True,
     )
     # `warmup_ratio` does not exist any more. transformers v5 / TRL 1.10 expose only

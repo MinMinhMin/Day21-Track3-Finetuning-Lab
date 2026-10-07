@@ -24,7 +24,7 @@
 # >
 # > Tinh thần §17.3 vẫn đúng: *tăng tốc chỉ miễn phí khi ranh giới chuỗi được tôn
 # > trọng.* Ở đây điều kiện đó không thoả, nên ta không bật.
-# | `loss_type` | `chunked_nll` | §14 |
+# | `loss_type` | `nll` | §14; compatible with Qwen3.5's partial `forward` on Kaggle |
 # | `alpha` | `2r` | §10.3 |
 
 # %%
