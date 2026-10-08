@@ -102,7 +102,8 @@ def run_contrast(key: str) -> dict:
               f"trainable tensors bf16 -> fp32 for the fp16 GradScaler")
     numeric_guard = train.install_finite_metrics_guard(trainer)
     print("  FP16 scaler:", train.configure_fp16_scaler(trainer))
-    print("  forward/backward preflight:", train.preflight_training(trainer))
+    preflight = train.preflight_training(trainer)
+    print("  forward/backward preflight:", preflight)
 
     t0 = time.perf_counter()
     res = trainer.train()
@@ -115,6 +116,8 @@ def run_contrast(key: str) -> dict:
     row = train.summarize_run(spec, TIER, targets, trainable, elapsed, generate.peak_vram_gb())
     row["final_loss"] = round(res.training_loss, 4)
     row.update(numeric_guard.summary())
+    row["amp_initial_scale"] = preflight["loss_scale"]
+    row["preflight_scale_backoffs"] = preflight["scale_backoffs"]
     row["max_steps"] = max_steps
     row["teaches"] = spec.teaches
     report.append_row(row, results_dir=ROOT / "results")

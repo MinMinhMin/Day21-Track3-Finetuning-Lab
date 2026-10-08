@@ -316,7 +316,8 @@ def configure_fp16_scaler(trainer) -> dict:
     """Start AMP conservatively; its default 65536 can overflow FP16 backward.
 
     Use GradScaler's public state API before its first step. Dynamic scaling and
-    overflow skipping remain enabled. All NB3/NB4 runs use the same scale.
+    overflow skipping remain enabled. NB3/NB4 start at the same scale; preflight
+    can lower it when that model's scaled backward overflows.
     """
     scaler = trainer.accelerator.scaler
     if not trainer.args.fp16 or scaler is None or not scaler.is_enabled():
@@ -331,7 +332,11 @@ def preflight_training(trainer) -> dict:
     """Check a real batch's scaled backward before any optimizer updates.
 
     Probe through the trainer's collator, input placement, AMP context and patched
-    model. Preserve RNG and weights, and always clear gradients, including on error.
+    model. A finite forward can still overflow during scaled FP16 backward. Retry
+    the identical batch/RNG with GradScaler's backoff factor, at most 16 times.
+    Commit the lower scale only after all gradients are finite and some nonzero.
+    Preserve weights/RNG and always clear gradients, including on error. Loss NaN
+    and persistent backward NaN remain fatal; no optimizer step is performed here.
     """
     import torch
 
@@ -339,6 +344,10 @@ def preflight_training(trainer) -> dict:
     was_training = model.training
     scaler = trainer.accelerator.scaler
     scale = scaler.get_scale() if scaler is not None and scaler.is_enabled() else 1.0
+    initial_scale = scale
+    can_backoff = (getattr(trainer.args, "fp16", False)
+                   and scaler is not None and scaler.is_enabled())
+    backoff_factor = scaler.get_backoff_factor() if can_backoff else None
     cuda_devices = list(range(torch.cuda.device_count())) if torch.cuda.is_available() else []
     try:
         with torch.random.fork_rng(devices=cuda_devices):
@@ -350,26 +359,52 @@ def preflight_training(trainer) -> dict:
             inputs = trainer._prepare_inputs(trainer.data_collator([trainer.train_dataset[0]]))
             if not bool((inputs["labels"][..., 1:] != -100).any()):
                 raise ValueError("Preflight batch has no supervised next-token labels.")
-            with trainer.accelerator.autocast():
-                loss = model(**inputs, use_cache=False).loss
-            if not bool(torch.isfinite(loss).all()):
-                raise FloatingPointError(f"Preflight loss is non-finite: {loss.detach().float().item()}")
-            (loss * scale).backward()
-            n_grad = 0
-            nonzero = False
-            for name, param in model.named_parameters():
-                if not param.requires_grad or param.grad is None:
-                    continue
-                n_grad += 1
-                if not bool(torch.isfinite(param.grad).all()):
+            for backoffs in range(17):
+                model.zero_grad(set_to_none=True)
+                # Each attempt sees identical dropout and checkpoint recomputation.
+                with torch.random.fork_rng(devices=cuda_devices):
+                    with trainer.accelerator.autocast():
+                        loss = model(**inputs, use_cache=False).loss
+                    if not bool(torch.isfinite(loss).all()):
+                        raise FloatingPointError(
+                            f"Preflight loss is non-finite: {loss.detach().float().item()}")
+                    (loss * scale).backward()
+                n_grad = 0
+                nonzero = False
+                bad_gradient = None
+                for name, param in model.named_parameters():
+                    if not param.requires_grad or param.grad is None:
+                        continue
+                    n_grad += 1
+                    if not bool(torch.isfinite(param.grad).all()):
+                        bad_gradient = name
+                        break
+                    nonzero = nonzero or bool(param.grad.ne(0).any())
+                if bad_gradient is None:
+                    if not n_grad or not nonzero:
+                        raise FloatingPointError("Preflight has no nonzero trainable gradients.")
+                    if can_backoff and scale != initial_scale:
+                        state = scaler.state_dict()
+                        state["scale"] = scale
+                        state["_growth_tracker"] = 0
+                        scaler.load_state_dict(state)
+                    return {"loss": loss.detach().float().item(), "loss_scale": scale,
+                            "initial_loss_scale": initial_scale, "scale_backoffs": backoffs,
+                            "gradient_tensors": n_grad, "finite": True}
+                if not can_backoff or backoffs == 16:
                     raise FloatingPointError(
-                        f"Preflight gradient {name!r} contains NaN/Inf (loss_scale={scale}). "
-                        "No optimizer update or adapter save was performed.")
-                nonzero = nonzero or bool(param.grad.ne(0).any())
-            if not n_grad or not nonzero:
-                raise FloatingPointError("Preflight has no nonzero trainable gradients.")
-            return {"loss": loss.detach().float().item(), "loss_scale": scale,
-                    "gradient_tensors": n_grad, "finite": True}
+                        f"Preflight gradient {bad_gradient!r} contains NaN/Inf "
+                        f"(loss_scale={scale}, scale_backoffs={backoffs}, "
+                        f"loss={loss.detach().float().item()}). "
+                        "No optimizer update or adapter save was performed. "
+                        "FP16 scale calibration could not produce finite gradients.")
+                next_scale = scale * backoff_factor
+                warnings.warn(
+                    f"Preflight FP16 overflow in {bad_gradient!r} at loss_scale={scale}; "
+                    f"retrying identical batch at {next_scale}. No optimizer update performed.",
+                    RuntimeWarning, stacklevel=2)
+                scale = next_scale
+                del loss
     finally:
         model.zero_grad(set_to_none=True)
         model.train(was_training)

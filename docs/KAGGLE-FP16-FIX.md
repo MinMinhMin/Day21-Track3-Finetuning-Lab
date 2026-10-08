@@ -47,6 +47,54 @@ Con số 18 triệu trong log không đủ để suy ra loss thực: mặc đị
 NaN bằng loss tích lũy trước đó. Với gradient accumulation, phép thay thế lặp lại
 có thể khuếch đại giá trị đã tích lũy. Bản sửa tắt bộ lọc này để log phản ánh lỗi.
 
+### Lỗi QLoRA ở preflight trong log mới nhất
+
+Log mới xác nhận `correct`, `attn_only`, `wrong_lr` đã hoàn thành 30 step.
+`correct` có 30 optimizer update thực, không có AMP skip. Run `qlora` dừng trước
+step đầu tiên tại gradient `layers.0.linear_attn.in_proj_qkv.lora_A.default.weight`,
+`loss_scale=128`. Đây là lỗi ở preflight; các adapter đã hoàn thành vẫn dùng được.
+
+Preflight cũ nhân loss với scale 128 rồi dừng ngay nếu backward có NaN/Inf.
+Nó không thực hiện cơ chế giảm scale mà GradScaler dùng khi train. Scale đã qua
+kiểm tra với LoRA 16-bit không chứng minh scale đó phù hợp với QLoRA 4-bit.
+
+Đã tái hiện bằng lớp bitsandbytes NF4 thật, double quantization, FP16 compute:
+loss forward hữu hạn, nhưng gradient tràn tại scale 128. Giảm về 16 cho gradient
+hữu hạn; GradScaler + AdamW cập nhật adapter thành công. Trọng số nền vẫn là
+`uint8` chứa NF4, không bị giải lượng tử hay thay đổi. Đây là kiểm tra cơ chế
+overflow; chưa phải tái hiện toàn bộ model 4B và batch Kaggle trong log.
+
+Preflight mới thử lại cùng batch và trạng thái RNG, giảm scale theo backoff factor
+của GradScaler, tối đa 16 lần. Chỉ giữ scale mới khi **mọi** gradient trainable
+đều hữu hạn và có gradient khác 0. Scale có thể nhỏ hơn 1, đúng với
+[cơ chế FP16 của PyTorch](https://docs.pytorch.org/docs/2.14/amp.html#gradient-scaling).
+Loss NaN dừng ngay; backward vẫn NaN sau các lần giảm scale cũng dừng. Không có
+optimizer update trong preflight. `results/runs.csv` ghi `amp_initial_scale`
+(scale đã qua preflight) và `preflight_scale_backoffs` cho những run chạy mới.
+
+**Tiếp tục ngay trong session của log này**, sau khi push bản sửa lên fork:
+
+```python
+%cd /kaggle/working/Day21-Track3-Finetuning-Lab
+!git pull --ff-only
+```
+
+Trong cell Core của RUN_ALL, đặt:
+
+```python
+COMPUTE_TIER = "T4"
+EVAL_LIMIT = ""
+STAGES = "nb4 nb5"
+FORCE_RETRAIN = False
+```
+
+Chạy lại cell Core. NB4 sẽ bỏ qua `attn_only` và `wrong_lr` đã lưu, chỉ train
+`qlora` còn thiếu; NB5 đánh giá đủ các run. Giữ `adapters/correct`,
+`adapters/attn_only`, `adapters/wrong_lr`, `data/split` và `results` từ session
+này. Nếu trước đó đã đặt biến môi trường `ONLY`, xóa nó để NB4 xét đủ ba run:
+`os.environ.pop("ONLY", None)`. Nếu đổi sang session mới mất các file đó, cần
+khôi phục kết quả hoặc chạy lại đầy đủ NB1–NB5.
+
 ## Những thay đổi được áp dụng
 
 1. Tính L2 normalization trong FP32, trước `rsqrt`, cho đường FP16 của Qwen3.5.
@@ -59,6 +107,7 @@ có thể khuếch đại giá trị đã tích lũy. Bản sửa tắt bộ l�
    forward của Qwen3.5. Đây là hai lỗi tương thích riêng đã gặp trên T4×2.
 4. Khởi tạo GradScaler ở 128 thay vì 65536. Thử nghiệm trên cùng model nhỏ sau khi
    sửa normalization: scale 128 có gradient hữu hạn; scale 65536 vẫn gây overflow.
+   Preflight tự giảm scale nếu backward của run đó tràn, rồi mới bắt đầu train.
    Cơ chế tăng/giảm thang và bỏ qua update bị overflow của GradScaler vẫn hoạt động.
 5. NB3 và mỗi run NB4 kiểm tra một batch thật bằng forward + scaled backward
    trước khi train. Kiểm tra không cập nhật trọng số, giữ trạng thái RNG và xóa
@@ -84,8 +133,10 @@ có thể khuếch đại giá trị đã tích lũy. Bản sửa tắt bộ l�
    ```
 
    Chạy lại cả NB2 vì đường chuẩn hóa đã thay đổi; không trộn baseline cũ với eval mới.
-5. NB3/NB4 phải in `norm_dtype: fp32`, `projection_dtype: fp32`, scaler 128 và
+5. NB3/NB4 phải in `norm_dtype: fp32`, `projection_dtype: fp32`, scaler khởi tạo 128 và
    `forward/backward preflight` có `finite: True`, loss hữu hạn, gradient khác 0.
+   Nếu preflight in cảnh báo overflow, xem `loss_scale` cuối cùng và
+   `scale_backoffs`; scale dùng để train có thể thấp hơn 128.
    Các run phải hoàn thành, có adapter và dòng kết quả riêng trong `results/runs.csv`.
    Nếu có cảnh báo `AMP overflow ... optimizer update skipped`, xem các cột
    `optimizer_steps_attempted`, `optimizer_updates`, `amp_skipped_steps`,
@@ -104,8 +155,9 @@ cần tính lại baseline NB2 đã tạo bằng bản sửa FP16 đầu tiên.
 ## Giới hạn kiểm chứng
 
 Đã kiểm tra tensor thật và ba vòng update LoRA trên Qwen3.5 nhỏ với FP16, AMP,
-checkpointing, mask và loss TRL. Máy sửa mã không có CUDA: run đầy đủ model 4B,
-QLoRA bitsandbytes và kiểm tra hai GPU cần thực hiện trên Kaggle. Kiểm tra nhỏ
+checkpointing, mask và loss TRL; đã kiểm tra giảm scale và update qua lớp NF4
+bitsandbytes thật trên CPU. Máy sửa mã không có CUDA: run đầy đủ model 4B,
+QLoRA trên GPU và kiểm tra hai GPU cần thực hiện trên Kaggle. Kiểm tra nhỏ
 không chứng minh chất lượng adapter hay điểm target/regression của run mới.
 
 Trong report, ghi rõ FP16 weights + FP32 normalization/loss/adapters, GPU T4×2,
