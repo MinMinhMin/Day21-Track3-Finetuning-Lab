@@ -101,6 +101,8 @@ REQUIRED_ARTIFACTS = {
     "results/verdict.json": "NB5 — the regression-gate verdict",
     "results/autopsy.json": "NB5 §4 — the NB4 contrasts scored on the TARGET task, "
                             "which is what settles whether a misconfiguration lost",
+    "results/report_examples.json": "full baseline/FT outputs for at least five examples, "
+                                    "including two genuine FT losses (rubric 3.4)",
     "submission/REPORT.md": "your evaluation report",
 }
 
@@ -125,6 +127,27 @@ def full() -> None:
                   "conclusion plus a ≥100-word verdict reading")
         else:
             check("REPORT.md filled in", OK, f"~{len(text.split())} words")
+
+    examples = _load_json(ROOT / "results" / "report_examples.json")
+    if (ROOT / "results" / "report_examples.json").exists() and examples is None:
+        check("qualitative evidence readable", FAIL, "report_examples.json is not valid JSON")
+    if examples is not None:
+        from labkit.submission import validate_examples
+        try:
+            targets = [json.loads(line) for line in
+                       (ROOT / "data" / "eval_target.jsonl").read_text(encoding="utf-8").splitlines()
+                       if line.strip()]
+            regression = [json.loads(line) for line in
+                          (ROOT / "data" / "eval_regression.jsonl").read_text(encoding="utf-8").splitlines()
+                          if line.strip()]
+            errors = validate_examples(examples.get("selected", []), targets, regression)
+            check("five examples + two genuine FT losses", FAIL if errors else OK,
+                  "; ".join(errors) if errors else "full outputs rescored against the frozen dataset")
+            if not examples.get("replay_matches_original", False):
+                check("supplementary inference differs", WARN,
+                      "supplementary scores differ from the original run; disclose this in REPORT.md")
+        except (AttributeError, OSError, ValueError) as exc:
+            check("qualitative evidence readable", FAIL, str(exc))
 
     # --- NB1 integrity ---
     proof = _load_json(ROOT / "results" / "mask_proof.json")
