@@ -170,9 +170,14 @@ def prepare_chunked_loss_forward(model) -> dict:
     Calls still go through the original partial, including any arguments it captured.
     Other model implementations are left untouched.
     """
+    loss_device_fix = align_chunked_loss_label_devices()
     original_forward = getattr(model, "forward", None)
     if not isinstance(original_forward, functools.partial):
-        return {"patched": False, "reason": "forward is not functools.partial"}
+        return {
+            "patched": False,
+            "reason": "forward is not functools.partial",
+            "loss_device_alignment": loss_device_fix,
+        }
 
     effective_signature = inspect.signature(original_forward)
     params = list(effective_signature.parameters.values())
@@ -190,7 +195,52 @@ def prepare_chunked_loss_forward(model) -> dict:
     _forward_compat.__qualname__ = f"{type(model).__name__}.forward"
     _forward_compat.__signature__ = unbound_signature
     model.forward = types.MethodType(_forward_compat, model)
-    return {"patched": True, "signature": str(effective_signature)}
+    return {
+        "patched": True,
+        "signature": str(effective_signature),
+        "loss_device_alignment": loss_device_fix,
+    }
+
+
+def align_chunked_loss_label_devices() -> dict:
+    """Move chunked-NLL labels to ``hidden_states.device`` before TRL indexes them.
+
+    With ``device_map="auto"`` on Kaggle's two T4s, the model can produce its final
+    hidden states on ``cuda:1`` while Trainer leaves the labels on the input device.
+    TRL 1.10 builds an index tensor from those labels and applies it to hidden states,
+    which raises when the two CUDA devices differ. Patch the private helper narrowly:
+    only ``labels`` / ``shift_labels`` are copied, and only when their device differs.
+    """
+    try:
+        import importlib
+        sft_trainer = importlib.import_module("trl.trainer.sft_trainer")
+        original_loss = sft_trainer._chunked_cross_entropy_loss
+    except (ImportError, AttributeError) as exc:
+        return {"patched": False, "reason": f"TRL chunked loss helper unavailable: {exc}"}
+
+    if getattr(original_loss, "_labkit_align_label_devices", False):
+        return {"patched": False, "reason": "already patched"}
+
+    signature = inspect.signature(original_loss)
+    if "hidden_states" not in signature.parameters:
+        return {
+            "patched": False,
+            "reason": "TRL chunked loss signature has no hidden_states parameter",
+        }
+
+    @functools.wraps(original_loss)
+    def _loss_with_aligned_labels(hidden_states, *args, **kwargs):
+        bound = signature.bind_partial(hidden_states, *args, **kwargs)
+        target_device = hidden_states.device
+        for name in ("labels", "shift_labels"):
+            labels = bound.arguments.get(name)
+            if labels is not None and labels.device != target_device:
+                bound.arguments[name] = labels.to(target_device)
+        return original_loss(*bound.args, **bound.kwargs)
+
+    _loss_with_aligned_labels._labkit_align_label_devices = True
+    sft_trainer._chunked_cross_entropy_loss = _loss_with_aligned_labels
+    return {"patched": True, "target_device": "hidden_states.device"}
 
 
 def install_finite_metrics_guard(trainer) -> None:
