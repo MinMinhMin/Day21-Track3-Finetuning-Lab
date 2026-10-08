@@ -149,6 +149,6 @@ def test_base_model_override_keeps_tier_settings(monkeypatch):
     monkeypatch.setenv("BASE_MODEL", "Qwen/Qwen3.5-2B")
     t = get_tier("T4")
     assert t.model_id == "Qwen/Qwen3.5-2B"
-    assert (t.max_length, t.per_device_batch, t.grad_accum) == (1024, 1, 16)
+    assert (t.max_length, t.per_device_batch, t.grad_accum) == (256, 1, 16)
     monkeypatch.delenv("BASE_MODEL")
     assert get_tier("T4").model_id == "unsloth/Qwen3.5-4B"

@@ -24,7 +24,7 @@
 # >
 # > Tinh thần §17.3 vẫn đúng: *tăng tốc chỉ miễn phí khi ranh giới chuỗi được tôn
 # > trọng.* Ở đây điều kiện đó không thoả, nên ta không bật.
-# | `loss_type` | `nll` | §14; compatible with Qwen3.5's partial `forward` on Kaggle |
+# | `loss_type` | `chunked_nll` | §14; memory-efficient NLL with Qwen3.5 compatibility wrapper |
 # | `alpha` | `2r` | §10.3 |
 
 # %%
@@ -136,6 +136,8 @@ print(json.dumps({k: str(v) for k, v in sft_kwargs.items()}, indent=2)[:900])
 
 # %%
 generate.free_memory()
+forward_fix = train.prepare_chunked_loss_forward(model)
+print("chunked loss forward fix:", forward_fix)
 trainer = SFTTrainer(
     model=model,
     args=SFTConfig(**sft_kwargs),
@@ -149,11 +151,13 @@ trainer = SFTTrainer(
 # scripts/probe_precision.py. No-op on bf16/fp32 hardware.
 fix = train.align_trainable_precision(trainer.model)
 print("precision fix:", fix)
+train.install_finite_metrics_guard(trainer)
 
 t0 = time.perf_counter()
 result = trainer.train()
 elapsed = time.perf_counter() - t0
 print(f"train {elapsed:.0f}s  final loss {result.training_loss:.4f}")
+train.assert_finite_training(trainer.model, result.training_loss)
 
 # %% [markdown]
 # ## 6. LƯU ADAPTER NGAY

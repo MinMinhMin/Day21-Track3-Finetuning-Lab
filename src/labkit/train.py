@@ -15,14 +15,17 @@ The defaults encode the deck:
     `assistant_only_loss` — on Qwen3.5 (no `{% generation %}` markers) TRL >= 1.10 either
     raises or substitutes its own patched template, so the mask is not NB1's
     (see check_mask_agreement.py)
-  * `loss_type="nll"` — avoids TRL's chunked-LM-head patch, which is incompatible
-    with Qwen3.5's `functools.partial` model forward in the Kaggle environment
+  * `loss_type="chunked_nll"` — the memory-efficient loss used by the lab. Before
+    SFTTrainer construction, `prepare_chunked_loss_forward()` adapts Qwen3.5's
+    `functools.partial` forward to the bound-method shape TRL expects.
 """
 from __future__ import annotations
 
 import dataclasses
+import functools
 import inspect
 import math
+import types
 import warnings
 
 from . import device
@@ -111,9 +114,9 @@ def sft_config_kwargs(
         report_to="none",
         seed=seed,
         packing=False,       # we supply pre-tokenized labels -- see the note below
-        # Plain NLL avoids TRL's chunked loss patch, which assumes model.forward is a
-        # bound method. Qwen3.5 exposes it as functools.partial and crashes in SFTTrainer.
-        loss_type="nll",
+        # Same NLL math, but chunks the LM-head projection to avoid materializing all
+        # sequence×vocabulary logits. Adapt Qwen3.5's partial forward before SFTTrainer.
+        loss_type="chunked_nll",
         gradient_checkpointing=True,
     )
     # `warmup_ratio` does not exist any more. transformers v5 / TRL 1.10 expose only
@@ -155,6 +158,77 @@ def sft_config_kwargs(
     if max_steps is not None:
         kw["max_steps"] = max_steps
     return kw
+
+
+def prepare_chunked_loss_forward(model) -> dict:
+    """Make Qwen3.5's partial ``forward`` compatible with TRL's chunked-NLL patch.
+
+    TRL wraps ``model.forward`` as a bound method and reads
+    ``original_forward.__func__`` to preserve its signature. Qwen3.5 exposes its
+    decorated forward as ``functools.partial`` instead. Bind a small delegating method
+    and give it the effective partial signature with a synthetic leading ``self``.
+    Calls still go through the original partial, including any arguments it captured.
+    Other model implementations are left untouched.
+    """
+    original_forward = getattr(model, "forward", None)
+    if not isinstance(original_forward, functools.partial):
+        return {"patched": False, "reason": "forward is not functools.partial"}
+
+    effective_signature = inspect.signature(original_forward)
+    params = list(effective_signature.parameters.values())
+    self_kind = (inspect.Parameter.POSITIONAL_ONLY
+                 if params and params[0].kind is inspect.Parameter.POSITIONAL_ONLY
+                 else inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    unbound_signature = effective_signature.replace(
+        parameters=[inspect.Parameter("self", self_kind), *params]
+    )
+
+    def _forward_compat(self, *args, **kwargs):
+        return original_forward(*args, **kwargs)
+
+    _forward_compat.__name__ = "forward"
+    _forward_compat.__qualname__ = f"{type(model).__name__}.forward"
+    _forward_compat.__signature__ = unbound_signature
+    model.forward = types.MethodType(_forward_compat, model)
+    return {"patched": True, "signature": str(effective_signature)}
+
+
+def install_finite_metrics_guard(trainer) -> None:
+    """Abort training at the first logged NaN/Inf loss or gradient norm."""
+    from transformers import TrainerCallback
+
+    class _FiniteMetricsGuard(TrainerCallback):
+        def on_log(self, args, state, control, logs=None, **kwargs):
+            for name in ("loss", "grad_norm", "eval_loss"):
+                value = (logs or {}).get(name)
+                if value is None:
+                    continue
+                try:
+                    finite = math.isfinite(float(value))
+                except (TypeError, ValueError, OverflowError):
+                    finite = False
+                if not finite:
+                    raise FloatingPointError(
+                        f"Training stopped: logged {name}={value!r} at step "
+                        f"{state.global_step}; no adapter should be saved."
+                    )
+            return control
+
+    trainer.add_callback(_FiniteMetricsGuard())
+
+
+def assert_finite_training(model, training_loss: float) -> None:
+    """Refuse to save an adapter if the loss or any trainable weight is non-finite."""
+    if not math.isfinite(float(training_loss)):
+        raise FloatingPointError(f"Training loss is not finite: {training_loss!r}")
+
+    import torch
+
+    for name, param in model.named_parameters():
+        if param.requires_grad and not bool(torch.isfinite(param.detach()).all().item()):
+            raise FloatingPointError(
+                f"Trainable parameter {name!r} contains NaN/Inf; refusing to save adapter."
+            )
 
 
 def align_trainable_precision(model, precision: str | None = None) -> dict:

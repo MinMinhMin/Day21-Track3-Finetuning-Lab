@@ -89,6 +89,8 @@ def run_contrast(key: str) -> dict:
     lora_kwargs, _ = train.filter_kwargs(
         LoraConfig, train.lora_config_kwargs(spec, targets), label=f"LoraConfig[{key}]")
 
+    forward_fix = train.prepare_chunked_loss_forward(model)
+    print(f"  chunked loss forward fix: {forward_fix}")
     trainer = SFTTrainer(model=model, args=SFTConfig(**sft_kwargs),
                          train_dataset=train_ds, processing_class=tok,
                          peft_config=LoraConfig(**lora_kwargs))
@@ -98,10 +100,12 @@ def run_contrast(key: str) -> dict:
     if fix.get("recast"):
         print(f"  precision fix: recast {fix['recast']}/{fix['trainable_tensors']} "
               f"trainable tensors bf16 -> fp32 for the fp16 GradScaler")
+    train.install_finite_metrics_guard(trainer)
 
     t0 = time.perf_counter()
     res = trainer.train()
     elapsed = time.perf_counter() - t0
+    train.assert_finite_training(trainer.model, res.training_loss)
 
     out = ROOT / "adapters" / key
     trainer.model.save_pretrained(out)

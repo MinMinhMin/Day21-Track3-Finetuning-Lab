@@ -55,10 +55,12 @@ TIERS: dict[str, Tier] = {
         name="T4",
         model_id="unsloth/Qwen3.5-4B",
         vram_gb_bf16_lora=10.0,
-        max_length=1024,
+        # NB1's seed corpus p95 is 98 tokens (rounded to the rubric's 256-token floor).
+        # The current corpus max is 101, so this preserves every training example.
+        max_length=256,
         per_device_batch=1,
         grad_accum=16,
-        notes="Free Colab T4 (16 GB) — the default path for this lab.",
+        notes="T4 (16 GB) — p95-measured max_length=256; default path for this lab.",
     ),
     "BIGGPU": Tier(
         name="BIGGPU",
