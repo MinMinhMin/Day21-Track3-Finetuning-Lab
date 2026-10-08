@@ -101,6 +101,8 @@ def run_contrast(key: str) -> dict:
         print(f"  precision fix: recast {fix['recast']}/{fix['trainable_tensors']} "
               f"trainable tensors bf16 -> fp32 for the fp16 GradScaler")
     train.install_finite_metrics_guard(trainer)
+    print("  FP16 scaler:", train.configure_fp16_scaler(trainer))
+    print("  forward/backward preflight:", train.preflight_training(trainer))
 
     t0 = time.perf_counter()
     res = trainer.train()
@@ -184,9 +186,10 @@ print(report.markdown_table(rows, cols))
 # > `correct`. Đó mới là bảng để trả lời ba câu dưới đây. Nếu thứ tự của hai bảng khác
 # > nhau, hãy nói thẳng điều đó trong REPORT.md: bạn vừa đo được lý do lab cũ kết luận sai.
 #
-# **Về `grad_norm: nan` ở dòng log đầu tiên:** đó là `GradScaler` của fp16 đang dò thang
-# — vài step đầu tràn số và bị bỏ qua, đúng theo thiết kế. Bình thường. Cái *không*
-# bình thường là `nan` kéo dài suốt run: khi đó run đã chết và loss cuối vô nghĩa.
+# **Về `grad_norm: nan`:** kiểm tra forward/backward trước khi train phải có gradient
+# hữu hạn. Lab dùng chuẩn hóa L2 và projection loss FP32, cùng thang khởi đầu AMP
+# thấp hơn để tránh tràn FP16. Nếu log vẫn có NaN/Inf, dừng và kiểm tra; không dùng
+# loss cuối hay adapter của run đó để viết kết luận. Xem `docs/KAGGLE-FP16-FIX.md`.
 
 # %% [markdown]
 # ## 4. Câu hỏi phải trả lời trong REPORT.md

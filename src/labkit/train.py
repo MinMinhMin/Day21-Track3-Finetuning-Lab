@@ -32,6 +32,7 @@ from . import device
 from .config import MAX_EFFECTIVE_BATCH, LoraSpec, Tier
 
 WARMUP_FRACTION = 0.1
+FP16_INITIAL_SCALE = 128.0
 
 
 def planned_steps(n_examples: int, tier: Tier, epochs: float) -> int:
@@ -110,6 +111,11 @@ def sft_config_kwargs(
         lr_scheduler_type="cosine",
         num_train_epochs=num_train_epochs,
         logging_steps=5,
+        logging_first_step=True,
+        # The default filter substitutes previous losses for NaN micro-batches.
+        # With accumulation it can inflate the logged loss exponentially, hiding
+        # the actual failure (the Kaggle run printed 1.836e7).
+        logging_nan_inf_filter=False,
         save_strategy="no",
         report_to="none",
         seed=seed,
@@ -118,6 +124,7 @@ def sft_config_kwargs(
         # sequence×vocabulary logits. Adapt Qwen3.5's partial forward before SFTTrainer.
         loss_type="chunked_nll",
         gradient_checkpointing=True,
+        gradient_checkpointing_kwargs={"use_reentrant": False},
     )
     # `warmup_ratio` does not exist any more. transformers v5 / TRL 1.10 expose only
     # `warmup_steps` (measured on Colab 2026-08-20: SFTConfig warm-fields == ['warmup_steps']).
@@ -160,6 +167,40 @@ def sft_config_kwargs(
     return kw
 
 
+def stabilize_qwen_fp16(model) -> dict:
+    """Keep Qwen3.5's DeltaNet L2 normalization in FP32 on the FP16 path.
+
+    Transformers 5.15 normalizes Q/K *before* its FP32 cast. For small or zero
+    FP16 vectors, rsqrt's backward overflows (0 * inf -> NaN), even with an
+    unscaled, finite forward loss. Returning FP32 normalized vectors fixes both
+    the chunked and recurrent reference paths; their final output cast still
+    preserves the model's original dtype. No base weights are upcast here.
+    """
+    if device.precision() != "fp16":
+        return {"patched": False, "reason": "not FP16"}
+    if not getattr(model.config, "model_type", "").startswith("qwen3_5"):
+        return {"patched": False, "reason": "not Qwen3.5"}
+
+    import importlib
+    import torch
+
+    module = importlib.import_module(type(model).__module__)
+    original_norm = getattr(module, "l2norm", None)
+    if original_norm is None:
+        raise RuntimeError("Qwen3.5 l2norm helper changed; check the pinned Transformers version.")
+    if getattr(original_norm, "_labkit_fp32_norm", False):
+        return {"patched": False, "reason": "already patched", "norm_dtype": "fp32"}
+
+    @functools.wraps(original_norm)
+    def _fp32_l2norm(x, *args, **kwargs):
+        with torch.autocast(device_type=x.device.type, enabled=False):
+            return original_norm(x.float(), *args, **kwargs)
+
+    _fp32_l2norm._labkit_fp32_norm = True
+    module.l2norm = _fp32_l2norm
+    return {"patched": True, "norm_dtype": "fp32"}
+
+
 def prepare_chunked_loss_forward(model) -> dict:
     """Make Qwen3.5's partial ``forward`` compatible with TRL's chunked-NLL patch.
 
@@ -170,6 +211,7 @@ def prepare_chunked_loss_forward(model) -> dict:
     Calls still go through the original partial, including any arguments it captured.
     Other model implementations are left untouched.
     """
+    numeric_fix = stabilize_qwen_fp16(model)
     loss_device_fix = align_chunked_loss_devices()
     original_forward = getattr(model, "forward", None)
     if not isinstance(original_forward, functools.partial):
@@ -177,6 +219,7 @@ def prepare_chunked_loss_forward(model) -> dict:
             "patched": False,
             "reason": "forward is not functools.partial",
             "loss_device_alignment": loss_device_fix,
+            "qwen_numerics": numeric_fix,
         }
 
     effective_signature = inspect.signature(original_forward)
@@ -199,6 +242,7 @@ def prepare_chunked_loss_forward(model) -> dict:
         "patched": True,
         "signature": str(effective_signature),
         "loss_device_alignment": loss_device_fix,
+        "qwen_numerics": numeric_fix,
     }
 
 
@@ -219,7 +263,8 @@ def align_chunked_loss_devices() -> dict:
         return {"patched": False, "reason": f"TRL chunked loss helper unavailable: {exc}"}
 
     if getattr(original_loss, "_labkit_align_devices", False):
-        return {"patched": False, "reason": "already patched"}
+        return {"patched": False, "reason": "already patched",
+                "target_device": "lm_head_weight.device", "projection_dtype": "fp32"}
 
     signature = inspect.signature(original_loss)
     if "hidden_states" not in signature.parameters:
@@ -227,6 +272,23 @@ def align_chunked_loss_devices() -> dict:
             "patched": False,
             "reason": "TRL chunked loss signature has no hidden_states parameter",
         }
+
+    # Disabling autocast at the outer loss alone is insufficient: checkpoint
+    # recomputation restores the AMP context. Protect the per-chunk function so
+    # projection and softmax stay FP32 during both forward and backward.
+    original_chunk = getattr(sft_trainer, "_chunk", None)
+    if original_chunk is None:
+        raise RuntimeError("TRL chunk helper changed; install the pinned TRL version.")
+    if not getattr(original_chunk, "_labkit_fp32_projection", False):
+        @functools.wraps(original_chunk)
+        def _fp32_chunk(h, w, b, *args, **kwargs):
+            import torch
+            with torch.autocast(device_type=h.device.type, enabled=False):
+                return original_chunk(h.float(), w.float(),
+                                      None if b is None else b.float(), *args, **kwargs)
+
+        _fp32_chunk._labkit_fp32_projection = True
+        sft_trainer._chunk = _fp32_chunk
 
     @functools.wraps(original_loss)
     def _loss_with_aligned_devices(hidden_states, *args, **kwargs):
@@ -247,7 +309,70 @@ def align_chunked_loss_devices() -> dict:
 
     _loss_with_aligned_devices._labkit_align_devices = True
     sft_trainer._chunked_cross_entropy_loss = _loss_with_aligned_devices
-    return {"patched": True, "target_device": "lm_head_weight.device"}
+    return {"patched": True, "target_device": "lm_head_weight.device", "projection_dtype": "fp32"}
+
+
+def configure_fp16_scaler(trainer) -> dict:
+    """Start AMP conservatively; its default 65536 can overflow FP16 backward.
+
+    Use GradScaler's public state API before its first step. Dynamic scaling and
+    overflow skipping remain enabled. All NB3/NB4 runs use the same scale.
+    """
+    scaler = trainer.accelerator.scaler
+    if not trainer.args.fp16 or scaler is None or not scaler.is_enabled():
+        return {"changed": False, "reason": "no FP16 GradScaler"}
+    state = scaler.state_dict()
+    state["scale"] = FP16_INITIAL_SCALE
+    scaler.load_state_dict(state)
+    return {"changed": True, "initial_scale": scaler.get_scale()}
+
+
+def preflight_training(trainer) -> dict:
+    """Check a real batch's scaled backward before any optimizer updates.
+
+    Probe through the trainer's collator, input placement, AMP context and patched
+    model. Preserve RNG and weights, and always clear gradients, including on error.
+    """
+    import torch
+
+    model = trainer.model
+    was_training = model.training
+    scaler = trainer.accelerator.scaler
+    scale = scaler.get_scale() if scaler is not None and scaler.is_enabled() else 1.0
+    cuda_devices = list(range(torch.cuda.device_count())) if torch.cuda.is_available() else []
+    try:
+        with torch.random.fork_rng(devices=cuda_devices):
+            model.train()
+            model.zero_grad(set_to_none=True)
+            if trainer.args.gradient_checkpointing:
+                model.gradient_checkpointing_enable(
+                    gradient_checkpointing_kwargs=trainer.args.gradient_checkpointing_kwargs or {})
+            inputs = trainer._prepare_inputs(trainer.data_collator([trainer.train_dataset[0]]))
+            if not bool((inputs["labels"][..., 1:] != -100).any()):
+                raise ValueError("Preflight batch has no supervised next-token labels.")
+            with trainer.accelerator.autocast():
+                loss = model(**inputs, use_cache=False).loss
+            if not bool(torch.isfinite(loss).all()):
+                raise FloatingPointError(f"Preflight loss is non-finite: {loss.detach().float().item()}")
+            (loss * scale).backward()
+            n_grad = 0
+            nonzero = False
+            for name, param in model.named_parameters():
+                if not param.requires_grad or param.grad is None:
+                    continue
+                n_grad += 1
+                if not bool(torch.isfinite(param.grad).all()):
+                    raise FloatingPointError(
+                        f"Preflight gradient {name!r} contains NaN/Inf (loss_scale={scale}). "
+                        "No optimizer update or adapter save was performed.")
+                nonzero = nonzero or bool(param.grad.ne(0).any())
+            if not n_grad or not nonzero:
+                raise FloatingPointError("Preflight has no nonzero trainable gradients.")
+            return {"loss": loss.detach().float().item(), "loss_scale": scale,
+                    "gradient_tensors": n_grad, "finite": True}
+    finally:
+        model.zero_grad(set_to_none=True)
+        model.train(was_training)
 
 
 def install_finite_metrics_guard(trainer) -> None:

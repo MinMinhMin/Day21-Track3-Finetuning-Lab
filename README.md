@@ -74,6 +74,10 @@ bật **Internet** và chọn **GPU T4×2**. Ô Setup tự chọn `/kaggle/worki
 GPU khả dụng và chạy NB1–NB5. Để nộp bài, giữ `EVAL_LIMIT=""`. Ô cuối cần Kaggle Secret
 `HF_TOKEN` có quyền ghi vào Hugging Face repo đã cấu hình trong notebook.
 
+Nếu run cũ có `grad_norm=nan` hoặc loss rất lớn, xem
+[bản sửa FP16 và cách chạy lại](docs/KAGGLE-FP16-FIX.md). Dùng session mới và
+`FORCE_RETRAIN=True`; bản sửa áp dụng cho cả NB3 và ba run NB4.
+
 ### Máy cá nhân
 
 ```bash

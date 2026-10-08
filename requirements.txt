@@ -7,11 +7,14 @@
 torch>=2.6,<3
 
 # Core training stack.
-transformers>=5.15,<6
-trl>=1.10,<2          # v1.x API: max_length (not max_seq_length), processing_class
+# These exact versions are exercised by the Qwen FP16 backward regression tests.
+# The chunked-loss compatibility wrapper uses TRL's private helpers: upgrading TRL
+# requires rerunning those tests, rather than silently picking a changed helper.
+transformers==5.15.0
+trl==1.10.0          # v1.x API: max_length (not max_seq_length), processing_class
                       # (not tokenizer), chunked_nll default since 1.7
-peft>=0.20,<1
-accelerate>=1.14,<2
+peft==0.20.0
+accelerate==1.14.0
 datasets>=5,<6
 
 # Colab preinstalls torchao 0.10.0; peft/transformers reject anything <= 0.16 with
@@ -22,7 +25,7 @@ torchao>=0.16
 
 # apply_chat_template needs jinja2, and transformers does NOT depend on it.
 jinja2>=3.1,<4
-tokenizers>=0.22,<1
+tokenizers==0.22.2
 
 # 4-bit path — used ONLY by the NB4 `qlora` contrast run. Linux/CUDA only; on macOS
 # skip it and skip that one run (the other two contrasts still work).

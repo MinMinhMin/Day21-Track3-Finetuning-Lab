@@ -1,8 +1,8 @@
 # CPU-only path: NB1 (data + mask) and the whole test suite.
 # No torch, no GPU, no model weights — only tokenizer files are downloaded.
 # This is the slice every student can run, and the slice CI can verify.
-transformers>=5.15,<6
-tokenizers>=0.22,<1
+transformers==5.15.0
+tokenizers==0.22.2
 # REQUIRED: transformers does not depend on jinja2, but apply_chat_template
 # raises ImportError without it. Verified on transformers 5.15.1.
 jinja2>=3.1,<4

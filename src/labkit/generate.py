@@ -62,6 +62,10 @@ def load_base(tier: Tier, load_in_4bit: bool = False):
             bnb_4bit_compute_dtype=device.torch_dtype(),
         )
     model = AutoModelForCausalLM.from_pretrained(tier.model_id, **kwargs)
+    # Use the same stable normalization for baselines, training and adapter eval.
+    # Otherwise NB2 and NB5 would silently compare different numerical paths.
+    from .train import stabilize_qwen_fp16
+    stabilize_qwen_fp16(model)
     return model, tok
 
 

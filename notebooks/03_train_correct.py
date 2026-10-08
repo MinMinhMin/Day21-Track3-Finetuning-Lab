@@ -151,7 +151,9 @@ trainer = SFTTrainer(
 # scripts/probe_precision.py. No-op on bf16/fp32 hardware.
 fix = train.align_trainable_precision(trainer.model)
 print("precision fix:", fix)
+print("FP16 scaler:", train.configure_fp16_scaler(trainer))
 train.install_finite_metrics_guard(trainer)
+print("forward/backward preflight:", train.preflight_training(trainer))
 
 t0 = time.perf_counter()
 result = trainer.train()
