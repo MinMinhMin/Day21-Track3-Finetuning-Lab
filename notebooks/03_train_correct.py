@@ -152,7 +152,7 @@ trainer = SFTTrainer(
 fix = train.align_trainable_precision(trainer.model)
 print("precision fix:", fix)
 print("FP16 scaler:", train.configure_fp16_scaler(trainer))
-train.install_finite_metrics_guard(trainer)
+numeric_guard = train.install_finite_metrics_guard(trainer)
 print("forward/backward preflight:", train.preflight_training(trainer))
 
 t0 = time.perf_counter()
@@ -174,6 +174,7 @@ print("saved ->", out)
 
 row = train.summarize_run(SPEC, TIER, targets, trainable, elapsed, generate.peak_vram_gb())
 row["final_loss"] = round(result.training_loss, 4)
+row.update(numeric_guard.summary())
 row["mask_mode"] = MASK_MODE
 # Record the step budget so NB5/verify can CHECK that the four runs are comparable,
 # instead of trusting that they were configured the same way.

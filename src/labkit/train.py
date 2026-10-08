@@ -375,13 +375,57 @@ def preflight_training(trainer) -> dict:
         model.train(was_training)
 
 
-def install_finite_metrics_guard(trainer) -> None:
-    """Abort training at the first logged NaN/Inf loss or gradient norm."""
+def install_finite_metrics_guard(trainer):
+    """Reject invalid training, allowing only AMP-confirmed skipped overflows.
+
+    A logged NaN grad_norm can describe an update GradScaler already skipped.
+    Verify that Accelerate reports the skip, the scale decreased, and adapter
+    weights remain finite before accepting it. Loss/entropy NaNs always fail.
+    """
     from transformers import TrainerCallback
 
     class _FiniteMetricsGuard(TrainerCallback):
+        def __init__(self):
+            self.attempted = 0
+            self.updated = 0
+            self.skipped = 0
+            self._scale_before_step = None
+            self._confirmed_overflow_step = None
+
+        def on_pre_optimizer_step(self, args, state, control, **kwargs):
+            scaler = trainer.accelerator.scaler
+            self._scale_before_step = (
+                scaler.get_scale() if scaler is not None and scaler.is_enabled() else None)
+            return control
+
+        def on_step_end(self, args, state, control, **kwargs):
+            self.attempted += 1
+            self._confirmed_overflow_step = None
+            if trainer.accelerator.optimizer_step_was_skipped:
+                scaler = trainer.accelerator.scaler
+                scale_after = (
+                    scaler.get_scale() if scaler is not None and scaler.is_enabled() else None)
+                confirmed = (args.fp16 and self._scale_before_step is not None
+                             and scale_after is not None
+                             and 0 < scale_after < self._scale_before_step)
+                if not confirmed:
+                    raise FloatingPointError(
+                        f"Optimizer update skipped at step {state.global_step} without "
+                        "a confirmed FP16 GradScaler backoff; refusing to continue.")
+                assert_finite_training(trainer.model, 0.0)
+                self.skipped += 1
+                self._confirmed_overflow_step = state.global_step
+                warnings.warn(
+                    f"AMP overflow at step {state.global_step}: optimizer update skipped, "
+                    f"loss scale {self._scale_before_step:g} -> {scale_after:g}; "
+                    "trainable weights remain finite. Continuing with the lower scale.",
+                    RuntimeWarning, stacklevel=2)
+            else:
+                self.updated += 1
+            return control
+
         def on_log(self, args, state, control, logs=None, **kwargs):
-            for name in ("loss", "grad_norm", "eval_loss"):
+            for name in ("loss", "eval_loss", "entropy", "grad_norm"):
                 value = (logs or {}).get(name)
                 if value is None:
                     continue
@@ -390,13 +434,33 @@ def install_finite_metrics_guard(trainer) -> None:
                 except (TypeError, ValueError, OverflowError):
                     finite = False
                 if not finite:
+                    if name == "grad_norm" and self._confirmed_overflow_step == state.global_step:
+                        continue
                     raise FloatingPointError(
                         f"Training stopped: logged {name}={value!r} at step "
                         f"{state.global_step}; no adapter should be saved."
                     )
             return control
 
-    trainer.add_callback(_FiniteMetricsGuard())
+        def on_train_end(self, args, state, control, **kwargs):
+            if not self.updated:
+                raise FloatingPointError(
+                    "Training performed no successful optimizer update; refusing to save adapter.")
+            return control
+
+        def summary(self) -> dict:
+            scaler = trainer.accelerator.scaler
+            return {
+                "optimizer_steps_attempted": self.attempted,
+                "optimizer_updates": self.updated,
+                "amp_skipped_steps": self.skipped,
+                "amp_final_scale": (scaler.get_scale()
+                                    if scaler is not None and scaler.is_enabled() else None),
+            }
+
+    guard = _FiniteMetricsGuard()
+    trainer.add_callback(guard)
+    return guard
 
 
 def assert_finite_training(model, training_loss: float) -> None:

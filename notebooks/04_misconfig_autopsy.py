@@ -100,7 +100,7 @@ def run_contrast(key: str) -> dict:
     if fix.get("recast"):
         print(f"  precision fix: recast {fix['recast']}/{fix['trainable_tensors']} "
               f"trainable tensors bf16 -> fp32 for the fp16 GradScaler")
-    train.install_finite_metrics_guard(trainer)
+    numeric_guard = train.install_finite_metrics_guard(trainer)
     print("  FP16 scaler:", train.configure_fp16_scaler(trainer))
     print("  forward/backward preflight:", train.preflight_training(trainer))
 
@@ -114,6 +114,7 @@ def run_contrast(key: str) -> dict:
 
     row = train.summarize_run(spec, TIER, targets, trainable, elapsed, generate.peak_vram_gb())
     row["final_loss"] = round(res.training_loss, 4)
+    row.update(numeric_guard.summary())
     row["max_steps"] = max_steps
     row["teaches"] = spec.teaches
     report.append_row(row, results_dir=ROOT / "results")
@@ -169,7 +170,7 @@ rows = [_seen[k] for k in ["correct", *CONTRAST_KEYS] if k in _seen] or rows
 
 # %%
 cols = ["run", "label", "r", "trainable_params", "learning_rate", "final_loss",
-        "train_seconds", "peak_vram_gb"]
+        "optimizer_updates", "amp_skipped_steps", "train_seconds", "peak_vram_gb"]
 print(report.markdown_table(rows, cols))
 
 # %% [markdown]
@@ -188,8 +189,10 @@ print(report.markdown_table(rows, cols))
 #
 # **Về `grad_norm: nan`:** kiểm tra forward/backward trước khi train phải có gradient
 # hữu hạn. Lab dùng chuẩn hóa L2 và projection loss FP32, cùng thang khởi đầu AMP
-# thấp hơn để tránh tràn FP16. Nếu log vẫn có NaN/Inf, dừng và kiểm tra; không dùng
-# loss cuối hay adapter của run đó để viết kết luận. Xem `docs/KAGGLE-FP16-FIX.md`.
+# thấp hơn để tránh tràn FP16. Nếu GradScaler xác nhận đã bỏ qua update và giảm
+# scale, đồng thời trọng số vẫn hữu hạn, callback cho tiếp tục và ghi số update bị
+# bỏ qua. Loss/entropy/trọng số NaN hoặc grad_norm NaN không được AMP xác nhận vẫn
+# dừng run. Đối chiếu `optimizer_updates` khi so ngân sách. Xem `docs/KAGGLE-FP16-FIX.md`.
 
 # %% [markdown]
 # ## 4. Câu hỏi phải trả lời trong REPORT.md

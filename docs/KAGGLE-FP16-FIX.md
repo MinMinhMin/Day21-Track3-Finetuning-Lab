@@ -19,6 +19,30 @@ Transformers 5.15 chuẩn hóa Q/K trước khi chuyển sang FP32. Với vector
 hoặc bằng 0, đạo hàm của `rsqrt` tràn số; phép nhân tiếp theo có thể tạo `0 * inf`.
 Loss forward hữu hạn không chứng minh backward hợp lệ.
 
+### Lỗi dừng ở step 15 sau bản sửa đầu
+
+Log tiếp theo đã qua preflight và train được: loss lần lượt 2.132 → 1.494 →
+0.2227 → 0.04354, entropy ở step 15 là 0.05544. Run dừng vì callback từ chối
+`grad_norm=nan`. Callback cũ đã coi cả gradient của update bị GradScaler bỏ qua
+là lỗi không thể phục hồi.
+
+Đã tái hiện trường hợp này bằng gradient FP16 thật: loss hữu hạn khoảng 0.04,
+gradient NaN tại scale 128, Accelerate xác nhận bỏ qua optimizer update và trọng
+số không thay đổi. Scale giảm về 64; update kế tiếp có gradient hữu hạn và cập
+nhật trọng số thành công. Đây là cơ chế xử lý overflow của
+[GradScaler](https://docs.pytorch.org/docs/2.14/notes/amp_examples.html).
+
+Log Kaggle chưa in cờ skip hay scale sau update, nên chỉ loss thấp không đủ để
+kết luận gradient NaN là an toàn. Callback mới chỉ cho tiếp tục khi **đủ cả ba**:
+
+- Accelerate báo `optimizer_step_was_skipped=True` tại đúng step đó.
+- GradScaler FP16 đang hoạt động và scale đã giảm so với trước update.
+- Toàn bộ trọng số trainable vẫn hữu hạn.
+
+Callback in cảnh báo có step và scale trước/sau. Loss, eval loss hoặc entropy
+NaN vẫn dừng; gradient NaN không được xác nhận vẫn dừng; run không có update
+thành công nào cũng không được lưu adapter.
+
 Con số 18 triệu trong log không đủ để suy ra loss thực: mặc định Trainer thay loss
 NaN bằng loss tích lũy trước đó. Với gradient accumulation, phép thay thế lặp lại
 có thể khuếch đại giá trị đã tích lũy. Bản sửa tắt bộ lọc này để log phản ánh lỗi.
@@ -38,7 +62,8 @@ có thể khuếch đại giá trị đã tích lũy. Bản sửa tắt bộ l�
    Cơ chế tăng/giảm thang và bỏ qua update bị overflow của GradScaler vẫn hoạt động.
 5. NB3 và mỗi run NB4 kiểm tra một batch thật bằng forward + scaled backward
    trước khi train. Kiểm tra không cập nhật trọng số, giữ trạng thái RNG và xóa
-   gradient khi kết thúc. Không lưu adapter nếu loss/gradient/weights không hợp lệ.
+   gradient khi kết thúc. Không lưu adapter nếu loss/weights không hữu hạn hoặc
+   gradient NaN không được xác nhận là update AMP đã bỏ qua an toàn.
 6. Bật log step đầu tiên, tắt `logging_nan_inf_filter`, dùng checkpoint không reentrant.
 7. Cố định Transformers 5.15.0, TRL 1.10.0, PEFT 0.20.0, Accelerate 1.14.0 và
    Tokenizers 0.22.2 — các phiên bản đã dùng trong kiểm tra tái hiện và kiểm tra sửa lỗi.
@@ -62,9 +87,19 @@ có thể khuếch đại giá trị đã tích lũy. Bản sửa tắt bộ l�
 5. NB3/NB4 phải in `norm_dtype: fp32`, `projection_dtype: fp32`, scaler 128 và
    `forward/backward preflight` có `finite: True`, loss hữu hạn, gradient khác 0.
    Các run phải hoàn thành, có adapter và dòng kết quả riêng trong `results/runs.csv`.
+   Nếu có cảnh báo `AMP overflow ... optimizer update skipped`, xem các cột
+   `optimizer_steps_attempted`, `optimizer_updates`, `amp_skipped_steps`,
+   `amp_final_scale`. `max_steps` là ngân sách step dự kiến; nếu số update thực
+   tế khác nhau giữa các run, phải ghi rõ hạn chế đó khi so sánh trong report.
 6. Dùng kết quả NB5 để viết `submission/REPORT.md`, rồi chạy gatekeeper trước khi
    nộp. Gatekeeper có thể báo report còn placeholder ngay sau run; cần điền report.
    Cell ZIP/upload vẫn dùng repo HF đã cấu hình và loại `.env`, `__pycache__`.
+
+Nếu vẫn còn session của log step 15, dữ liệu NB1 và baseline NB2 đã được lưu.
+Sau khi push bản sửa callback, chạy `git pull --ff-only` trong thư mục repo trên
+Kaggle, rồi đổi `STAGES = "nb3 nb4 nb5"` trong cell Core và chạy lại với
+`FORCE_RETRAIN=True`. Bản sửa callback không thay đổi forward/eval, nên không
+cần tính lại baseline NB2 đã tạo bằng bản sửa FP16 đầu tiên.
 
 ## Giới hạn kiểm chứng
 
